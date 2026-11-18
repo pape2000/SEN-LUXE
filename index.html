@@ -990,6 +990,24 @@ section{padding:clamp(72px,8vw,112px) 0}
   .senluxe-dl-btn{position:fixed;right:22px;bottom:26px;z-index:95;background:var(--black);color:var(--gold-bright);border:1px solid var(--gold-bright);padding:11px 18px;font-family:'Montserrat',sans-serif;font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,0.18);}
   .senluxe-dl-btn:hover{background:var(--gold-bright);color:var(--black);}
 </style>
+<style id="senluxe-v4-style">
+/* Barre de filtres du catalogue public retirée. */
+.slx-consent{display:flex;gap:10px;align-items:flex-start;margin-top:18px;font-size:12px;line-height:1.55;color:rgba(10,10,10,.68);cursor:pointer;}
+.slx-consent input{accent-color:#b8935f;margin-top:2px;flex:0 0 auto;width:15px;height:15px;}
+/* Apparition des cartes produits (rendu, filtres, mise à jour en direct) : discrète et brève. */
+@keyframes slxCardIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+#productGrid > .product-card{animation:slxCardIn .5s cubic-bezier(.2,.7,.2,1) both;}
+#productGrid > .product-card:nth-child(2){animation-delay:.04s} #productGrid > .product-card:nth-child(3){animation-delay:.08s}
+#productGrid > .product-card:nth-child(4){animation-delay:.12s} #productGrid > .product-card:nth-child(5){animation-delay:.16s}
+#productGrid > .product-card:nth-child(6){animation-delay:.2s} #productGrid > .product-card:nth-child(n+7){animation-delay:.22s}
+.product-card img{transition:opacity .45s ease, transform .9s cubic-bezier(.2,.7,.2,1);}
+.cart-drawer,.qv-overlay,.toast{will-change:transform,opacity;}
+@media (prefers-reduced-motion:reduce){
+  #productGrid > .product-card{animation:none!important;}
+  .slx-f-body{transition:none!important;}
+  .reveal{opacity:1!important;transform:none!important;transition:none!important;}
+}
+</style>
 </head>
 <body id="top">
 
@@ -1379,6 +1397,7 @@ section{padding:clamp(72px,8vw,112px) 0}
             <textarea id="ofComment" name="comment" rows="4" maxlength="300" placeholder="Une précision pour la livraison ou votre commande…"></textarea>
           </div>
         </div>
+        <label class="slx-consent" id="slxConsentWrap"><input type="checkbox" id="ofConsent" name="consent"> <span>J'accepte que SEN LUXE me recontacte au sujet de cette commande ou de mon panier (facultatif).</span></label>
 
         <div style="margin-top:26px;">
           <span class="eyebrow" style="display:block;margin-bottom:12px;">Livraison</span>
@@ -1749,11 +1768,12 @@ function renderProducts(){
   grid.innerHTML = '';
   const visibleProducts = PRODUCTS.filter(p=>p.active!==false);
   const special = getSpecialList(activeCat);
-  const list = special!==null ? special : (
+  let list = special!==null ? special : (
     activeCat==='all' ? visibleProducts :
     activeCat==='desktop:chains' ? visibleProducts.filter(p=>p.cat==='Maison' && /(?:chain|necklace|cha[iî]ne|collier|pendentif)/i.test(p.name)) :
     visibleProducts.filter(p=>p.cat===activeCat)
   );
+  list = senluxeFilterList(list);
 
   if(list.length===0){
     grid.style.display='none';
@@ -2226,6 +2246,8 @@ function resetDeliverySelection(){
 function openOrderForm(){
   directOrder = null;
   if(cart.length===0){ showToast('Votre panier est vide'); return; }
+  slxNewOrderRef(); senluxeTrack('checkout_start', { items: cart.length }, senluxeCartId());
+  slxCartSync(cart, senluxeCartId(), { stage:'checkout' }, 0);
   resetDeliverySelection();
   updateOrderTotals();
   const form = document.getElementById('orderForm');
@@ -2236,7 +2258,10 @@ function openOrderForm(){
 }
 function openOrderFormDirect(item){
   directOrder = [item];
+  slxNewOrderRef();
   senluxeDirectCheckout(item);
+  senluxeTrack('checkout_start', { items: 1, direct: true }, senluxeDirectCartId);
+  slxCartSync([item], senluxeDirectCartId, { stage:'checkout', direct:true }, 0);
   resetDeliverySelection();
   updateOrderTotals();
   const form = document.getElementById('orderForm');
@@ -2503,6 +2528,7 @@ async function submitOrder(e){
   if(!items.length){ showToast('Votre panier est vide.'); return; }
 
   const subtotal = orderProductsSubtotal();
+  const deliveryKey = deliveryOption;
   const deliveryFee = DELIVERY_PRICES[deliveryOption] || 0;
   const total = subtotal + deliveryFee;
   const orderNumber = 'SL-' + Date.now().toString().slice(-8);
@@ -2512,14 +2538,30 @@ async function submitOrder(e){
     deliveryOption: DELIVERY_LABELS[deliveryOption],
     deliveryFee, subtotal, total, items
   };
+  const submitBtnEarly = form.querySelector('button[type="submit"]');
+  const labelEarly = submitBtnEarly ? submitBtnEarly.textContent : '';
+  if(submitBtnEarly){ submitBtnEarly.disabled = true; submitBtnEarly.textContent = 'Enregistrement de la commande…'; }
+  const placed = await slxPlaceOrder(orderData, !!directOrder, deliveryKey);
+  if(submitBtnEarly){ submitBtnEarly.disabled = false; submitBtnEarly.textContent = labelEarly; }
+  if(placed && placed.refused){
+    showToast(placed.message || 'La commande n\u2019a pas pu être enregistrée.');
+    const fb = document.getElementById('orderFallback'); if(fb) fb.hidden = true;
+    return;
+  }
+  if(placed && placed.order_number){
+    orderData.orderNumber = placed.order_number; orderData.recorded = true;
+    if(Number.isFinite(Number(placed.delivery_fee))) orderData.deliveryFee = Number(placed.delivery_fee);
+    if(Number.isFinite(Number(placed.subtotal))) orderData.subtotal = Number(placed.subtotal);
+    if(Number.isFinite(Number(placed.total))) orderData.total = Number(placed.total);
+  }
   const templateParams = {
     to_email: ORDER_EMAIL,
-    email_subject: `Nouvelle commande SEN LUXE — ${fullname} (${orderNumber})`,
+    email_subject: `Nouvelle commande SEN LUXE — ${fullname} (${orderData.orderNumber})`,
     email_body: buildOrderEmailHtml({
       ...orderData,
-      deliveryFee: fmt(deliveryFee),
-      subtotal: fmt(subtotal),
-      total: fmt(total)
+      deliveryFee: fmt(orderData.deliveryFee),
+      subtotal: fmt(orderData.subtotal),
+      total: fmt(orderData.total)
     })
   };
   const whatsappUrl = buildWhatsAppOrderUrl(orderData);
@@ -2546,7 +2588,7 @@ async function submitOrder(e){
     if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = originalLabel; }
     senluxePendingOrder = { data: orderData, direct: !!directOrder };
     revealOrderFallback(whatsappUrl);
-    showToast('L’e-mail n’a pas été confirmé. Transmettez-la directement à SEN LUXE sur WhatsApp.');
+    showToast(orderData.recorded ? 'Commande ' + orderData.orderNumber + ' enregistrée. L’e-mail n’a pas été confirmé : transmettez-la aussi sur WhatsApp.' : 'L’e-mail n’a pas été confirmé. Transmettez-la directement à SEN LUXE sur WhatsApp.');
   }
 }
 
@@ -2674,10 +2716,10 @@ function senluxeCmsApplyHome(home){
 }
 function senluxeCmsApplyCollections(collections){
   if(!Array.isArray(collections))return;
-  const sorted=collections.slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  const sorted=senluxePriorityCollections(collections.slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)));
   const visibleKeys=sorted.filter(c=>c.visible!==false).map(c=>c.key).filter(Boolean);
   const originalOrder=['Maison','Bagues','Bracelets','Lunettes'];
-  CATEGORIES=originalOrder.filter(key=>visibleKeys.includes(key)).concat(visibleKeys.filter(key=>!originalOrder.includes(key)));
+  CATEGORIES=senluxePriorityKeys(originalOrder.filter(key=>visibleKeys.includes(key)).concat(visibleKeys.filter(key=>!originalOrder.includes(key))));
   CATEGORY_LABELS={}; CATEGORY_NAMES={};
   sorted.forEach(c=>{if(c.key){CATEGORY_LABELS[c.key]=c.label||c.name||c.key;CATEGORY_NAMES[c.key]=c.name||c.key;}});
   const gridEl=document.querySelector('.coll-grid');
@@ -2715,6 +2757,7 @@ function senluxeCmsApplySettings(settings){
 }
 function senluxeCmsApplyPayload(payload, updatedAt){
   if(!payload || typeof payload!=='object')return;
+  senluxeSetPriority(payload);
   if(Array.isArray(payload.products)){PRODUCTS=payload.products;}
   if(Array.isArray(payload.labels)){SENLUXE_LABELS=payload.labels;}
   if(payload.version){SENLUXE_DATA_VERSION=Number(payload.version)||1;}
@@ -2727,6 +2770,8 @@ function senluxeCmsApplyPayload(payload, updatedAt){
   if(payload.theme)senluxeApplyTheme(payload.theme);
   if(Array.isArray(payload.sections))senluxeApplySections(payload.sections);
   if(payload.settings)senluxeCmsApplySettings(payload.settings);
+  if(payload.seo)senluxeApplySeo(payload.seo, payload);
+  if(payload.experience)senluxeApplyExperience(payload.experience);
   if(typeof renderProducts==='function')renderProducts();
   const stat=document.getElementById('statCount');if(stat)stat.textContent=PRODUCTS.filter(p=>p.active!==false).length+'+';
   senluxeCmsLastPayload=payload;
@@ -2831,10 +2876,10 @@ function slxHydrate(el, sec){
 const SLX_THEME_DEFAULTS = {
   colors:{ gold:'#b8935f', goldBright:'#d4af37', black:'#0a0a0a', white:'#ffffff', ivory:'#faf9f6', mute:'#8a8a8a', btnBg:'#d4af37', btnText:'#0a0a0a', btnHoverBg:'transparent', btnHoverText:'#d4af37', border:'#e6e6e6' },
   fonts:{ title:'Playfair Display', body:'Montserrat' },
-  sizes:{ title:100, text:100 },
+  sizes:{ title:100, text:100, titleM:100 },
   shape:{ cardRadius:0, buttonRadius:0, imageRadius:0, shadow:'none', card:'bordered' },
-  layout:{ container:1360, sectionPad:100, headerPad:18, heroHeight:88, heroOverlay:72, heroAlign:'left', collColsD:4, collColsM:2, edColsD:3, footerPad:80 },
-  grid:{ colsD:4, colsT:3, colsM:2, gap:30, initial:0, moreText:'Voir plus' },
+  layout:{ container:1360, sectionPad:100, headerPad:18, heroHeight:88, heroOverlay:72, heroAlign:'left', collColsD:4, collColsM:2, edColsD:3, footerPad:80, heroValign:'center', heroTextMax:0, heroHeightM:0, sectionPadM:0, collRatio:'default' },
+  grid:{ colsD:4, colsT:3, colsM:2, gap:30, initial:0, moreText:'Voir plus', imgRatio:'1/1', badges:true, gapM:0 },
   anim:{ reveal:'fade-up', distance:26, speed:0.9, hoverZoom:true, zoom:104.5, buttons:'default', sliderFade:1.4, enabled:true }
 };
 const SLX_FONTS = ['Playfair Display','Cormorant Garamond','Cinzel','Bodoni Moda','Lora','DM Serif Display','Montserrat','Poppins','Lato','Raleway','Jost','Inter','Nunito Sans'];
@@ -2884,6 +2929,17 @@ function slxThemeCss(t){
   if(ch('grid','colsD') || ch('grid','gap')) out.push(`#productGrid{grid-template-columns:repeat(${slxNum(G.colsD,4,1,6)},minmax(0,1fr))!important;gap:${slxNum(G.gap,30,0,80)}px!important}`);
   if(ch('grid','colsT') || ch('grid','colsD')) out.push(`@media(max-width:1000px){#productGrid{grid-template-columns:repeat(${slxNum(G.colsT,3,1,4)},minmax(0,1fr))!important}}`);
   if(ch('grid','colsM') || ch('grid','colsT') || ch('grid','colsD')) out.push(`@media(max-width:720px){#productGrid{grid-template-columns:repeat(${slxNum(G.colsM,2,1,3)},minmax(0,1fr))!important;gap:${Math.min(slxNum(G.gap,30,0,80),16)}px!important}}`);
+  /* v4 : Hero, mobile et tablette, collections, cartes produits */
+  const RATIOS = ['1/1','4/5','3/4','2/3','4/3','16/9'];
+  if(ch('layout','heroValign')) out.push(`.hero-inner{justify-content:${L.heroValign==='top'?'flex-start':L.heroValign==='bottom'?'flex-end':'center'}}`);
+  if(Number(L.heroTextMax) > 0) out.push(`.hero-inner h1,.hero-inner p{max-width:${slxNum(L.heroTextMax,620,280,1200)}px}`);
+  if(Number(L.heroHeightM) > 0) out.push(`@media(max-width:768px){.hero{height:auto!important;min-height:${slxNum(L.heroHeightM,70,40,100)}vh!important}}`);
+  if(Number(L.sectionPadM) > 0) out.push(`@media(max-width:768px){section{padding:${slxNum(L.sectionPadM,64,10,200)}px 0}}`);
+  if(RATIOS.includes(L.collRatio)) out.push(`.coll-card{aspect-ratio:${L.collRatio}!important;height:auto!important}`);
+  if(ch('grid','imgRatio') && RATIOS.includes(G.imgRatio)) out.push(`.product-media{aspect-ratio:${G.imgRatio}!important}`);
+  if(G.badges===false) out.push('.product-card .badge{display:none!important}');
+  if(Number(G.gapM) > 0) out.push(`@media(max-width:720px){#productGrid{gap:${slxNum(G.gapM,16,0,60)}px!important}}`);
+  if(ch('sizes','titleM')){ const s = slxNum(th.sizes.titleM,100,60,160)/100; out.push(`@media(max-width:768px){.section-head h2{font-size:${(28*s).toFixed(1)}px!important}.hero-inner h1{font-size:${(38*s).toFixed(1)}px!important}}`); }
   const A = th.anim;
   if(A.enabled===false || A.reveal==='none') out.push('.reveal{opacity:1!important;transform:none!important;transition:none!important}');
   else {
@@ -3000,7 +3056,7 @@ const SENLUXE_DELIVERY_ICONS = {
   pin:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z" stroke="#B8935F" stroke-width="1.3"/><circle cx="12" cy="9.5" r="2.4" stroke="#B8935F" stroke-width="1.2"/></svg>'
 };
 function senluxeApplyDelivery(list){
-  const clean = list.filter(d=>d && d.id && d.label).map(d=>({...d, id:String(d.id).replace(/[^a-zA-Z0-9_-]/g,'')})).filter(d=>d.id);
+  const clean = list.filter(d=>d && d.id && d.label && d.active!==false).map(d=>({...d, id:String(d.id).replace(/[^a-zA-Z0-9_-]/g,'')})).filter(d=>d.id);
   if(!clean.length) return;
   Object.keys(DELIVERY_PRICES).forEach(k=>delete DELIVERY_PRICES[k]);
   Object.keys(DELIVERY_LABELS).forEach(k=>delete DELIVERY_LABELS[k]);
@@ -3134,6 +3190,8 @@ function senluxeItemsForStats(items){
     color: i.color ? (COLOR_LABEL[i.color]||i.color) : '', size:i.size||'', lens: i.lens ? (LENS_LABEL[i.lens]||i.lens) : '', opts: senluxeOptsList(i) }));
 }
 function senluxeCartChanged(){
+  slxSaveCartLocal();
+  if(cart.length || senluxeCartSent) slxCartSync(cart, senluxeCartId(), { stage:'cart' });
   if(!senluxeAnReady()) return;
   if(!cart.length && !senluxeCartSent) return;
   clearTimeout(senluxeCartTimer);
@@ -3147,25 +3205,29 @@ function senluxeDirectCheckout(item){
   senluxeDirectCartId = 'd-' + senluxeRandId();
   const items = senluxeItemsForStats([item]);
   senluxeTrack('cart', { items, total: items.reduce((s,i)=>s+i.price*i.qty, 0), direct:true }, senluxeDirectCartId);
+  slxCartSync([item], senluxeDirectCartId, { direct:true }, 0);
 }
+/* Coordonnées saisies volontairement par le client dans le formulaire de commande :
+   rangées dans la table Paniers (jamais dans les statistiques). */
 function senluxeCheckoutContact(){
-  if(!senluxeAnReady()) return;
   clearTimeout(senluxeCheckoutTimer);
   senluxeCheckoutTimer = setTimeout(()=>{
     const name = (document.getElementById('ofFullname')||{}).value || '', phone = (document.getElementById('ofPhone')||{}).value || '';
     if(name.trim().length < 2 && phone.replace(/\D/g,'').length < 7) return;
-    senluxeTrack('checkout', { name: name.trim().slice(0,80), phone: phone.trim().slice(0,30) }, directOrder ? senluxeDirectCartId : senluxeCartId());
+    const items = currentOrderItems();
+    slxCartSync(items, directOrder ? senluxeDirectCartId : senluxeCartId(), { stage:'checkout', direct: !!directOrder, contact:{ name: name.trim().slice(0,80), phone: phone.trim().slice(0,30) }, consent: slxConsent() }, 0);
   }, 1200);
 }
 function senluxeTrackOrder(orderData, wasDirect, channel){
+  /* Événement statistique SANS données personnelles : la commande complète est dans la table Commandes. */
   senluxeTrack('order', {
-    orderNumber: orderData.orderNumber, name: orderData.fullname, phone: orderData.phone, address: orderData.address,
-    comment: orderData.comment || '', delivery: orderData.deliveryOption, deliveryFee: orderData.deliveryFee,
-    subtotal: orderData.subtotal, total: orderData.total, items: senluxeItemsForStats(orderData.items), channel
+    orderNumber: orderData.orderNumber, delivery: orderData.deliveryOption, deliveryFee: orderData.deliveryFee,
+    subtotal: orderData.subtotal, total: orderData.total, items: senluxeItemsForStats(orderData.items), channel, recorded: !!orderData.recorded
   }, wasDirect ? senluxeDirectCartId : senluxeCartId());
+  slxOrderChannel(channel);
   if(!wasDirect){ senluxeResetCartId(); senluxeCartSent = false; }
 }
-document.addEventListener('change', e=>{ if(e.target && (e.target.id==='ofFullname' || e.target.id==='ofPhone')) senluxeCheckoutContact(); });
+document.addEventListener('change', e=>{ if(e.target && (e.target.id==='ofFullname' || e.target.id==='ofPhone' || e.target.id==='ofConsent')) senluxeCheckoutContact(); });
 (function(){ const l = document.getElementById('orderWhatsAppLink'); if(l) l.addEventListener('click', ()=>{ if(senluxePendingOrder){ senluxeTrackOrder(senluxePendingOrder.data, senluxePendingOrder.direct, 'whatsapp'); senluxePendingOrder = null; } }); })();
 setTimeout(()=>{
   try{ if(sessionStorage.getItem('senluxe_visit_sent')) return; }catch(e){}
@@ -3173,6 +3235,152 @@ setTimeout(()=>{
   senluxeTrack('visit', {});
   try{ sessionStorage.setItem('senluxe_visit_sent', '1'); }catch(e){}
 }, 1500);
+
+/* ================== SEN LUXE v4 — COMMANDES, PANIERS, FILTRES, PRIORITÉ, RÉFÉRENCEMENT ==================
+   Toutes les écritures passent par des fonctions serveur Supabase (RPC) validées côté serveur :
+   - senluxe_cart_sync   : panier (contenu, étape, coordonnées SEULEMENT si saisies par le client) ;
+   - senluxe_place_order : commande enregistrée dans la table dédiée, stock décompté en transaction.
+   Les événements de navigation (visite, fiche vue, ajout) ne contiennent aucune donnée personnelle. */
+
+var SLX_PRIORITY = null;          /* clé de la collection prioritaire (ANTIQUE par défaut)   */
+var SLX_ORDER_REF = null;         /* identifiant d'idempotence de la commande en cours       */
+var SLX_EXPERIENCE = {};
+function slxNorm(v){ return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase(); }
+function slxApiReady(){ return typeof senluxeCmsReady==='function' && senluxeCmsReady() && location.protocol!=='blob:'; }
+
+/* ---------- Collection prioritaire ---------- */
+function senluxeSetPriority(payload){
+  const home = (payload && payload.home) || {};
+  const wanted = home.priorityCollection===undefined ? 'ANTIQUE' : home.priorityCollection;
+  const cols = (payload && Array.isArray(payload.collections)) ? payload.collections : [];
+  if(!wanted){ SLX_PRIORITY = null; return; }
+  const w = slxNorm(wanted);
+  const hit = cols.find(c=>c && c.visible!==false && [c.key, c.name, c.label].some(x=>slxNorm(x)===w));
+  SLX_PRIORITY = hit ? hit.key : null;
+}
+function senluxePriorityCollections(sorted){
+  if(!SLX_PRIORITY) return sorted;
+  const i = sorted.findIndex(c=>c && c.key===SLX_PRIORITY); if(i <= 0) return sorted;
+  const out = sorted.slice(); const [c] = out.splice(i, 1); out.unshift(c); return out;
+}
+function senluxePriorityKeys(keys){
+  if(!SLX_PRIORITY || !keys.includes(SLX_PRIORITY)) return keys;
+  return [SLX_PRIORITY].concat(keys.filter(k=>k!==SLX_PRIORITY));
+}
+
+/* ---------- Catalogue public sans barre de filtres ---------- */
+/* La navigation par catégories reste active. La priorité de collection est conservée. */
+function senluxeFilterList(list){
+  const out = list.slice();
+  const idx = new Map(PRODUCTS.map((p,i)=>[p.id,i]));
+  if(SLX_PRIORITY && typeof activeCat!=='undefined' && activeCat==='all'){
+    out.sort((a,b)=>((b.cat===SLX_PRIORITY) - (a.cat===SLX_PRIORITY)) || idx.get(a.id)-idx.get(b.id));
+  }
+  return out;
+}
+
+/* ---------- Panier : persistance locale et synchronisation serveur ---------- */
+function slxSaveCartLocal(){ try{ localStorage.setItem('senluxe_cart_v1', JSON.stringify(cart.slice(0, 60))); }catch(e){} }
+function slxRestoreCartLocal(){
+  try{
+    if(cart.length) return;
+    const saved = JSON.parse(localStorage.getItem('senluxe_cart_v1') || '[]');
+    if(!Array.isArray(saved) || !saved.length) return;
+    const ok = saved.filter(i=>i && i.key && i.id && PRODUCTS.find(p=>p.id===i.id && p.active!==false) && Number(i.qty) > 0);
+    if(ok.length){ cart = ok.map(i=>Object.assign({}, i, { qty: Math.min(99, Math.max(1, Math.floor(Number(i.qty)))) })); renderCart(); }
+  }catch(e){}
+}
+function slxCartPayload(items, cartId, extra){
+  return Object.assign({ cart_id: cartId, visitor_id: senluxeStore('local', 'senluxe_vid', true), session_id: senluxeStore('session', 'senluxe_sid', true),
+    items: senluxeItemsForStats(items).map(i=>Object.assign(i, { img: undefined })) }, extra || {});
+}
+var slxCartSyncTimer = null;
+function slxCartSync(items, cartId, extra, delay){
+  if(!slxApiReady()) return;
+  clearTimeout(slxCartSyncTimer);
+  const run = ()=>slxRpc('senluxe_cart_sync', { p: slxCartPayload(items, cartId, extra) }, 8000).catch(()=>{});
+  if(delay===0) run(); else slxCartSyncTimer = setTimeout(run, delay || 1800);
+}
+function slxConsent(){ const c = document.getElementById('ofConsent'); return !!(c && c.checked); }
+
+/* ---------- Commande : enregistrement serveur, idempotent ---------- */
+function slxNewOrderRef(){ SLX_ORDER_REF = 'o' + senluxeRandId() + senluxeRandId(); return SLX_ORDER_REF; }
+async function slxPlaceOrder(orderData, wasDirect, deliveryKey){
+  if(!slxApiReady()) return { skipped:true };
+  const cartId = wasDirect ? senluxeDirectCartId : senluxeCartId();
+  const payload = {
+    client_ref: SLX_ORDER_REF || slxNewOrderRef(), cart_id: cartId, visitor_id: senluxeStore('local', 'senluxe_vid', true),
+    delivery_id: deliveryKey, delivery_label: orderData.deliveryOption, delivery_fee: orderData.deliveryFee, channel:'site',
+    customer: { name: orderData.fullname, phone: orderData.phone, address: orderData.address, comment: orderData.comment || '' },
+    consent: slxConsent(),
+    items: (orderData.items||[]).map(i=>({ id:i.id, name:i.name, qty:Number(i.qty)||1, price:Number(i.price)||0,
+      color: i.color || null, size: i.size || null, lens: i.lens ? (LENS_LABEL[i.lens]||i.lens) : null,
+      opts: Array.isArray(i.opts) ? i.opts : [], img: (typeof publicImageUrl==='function' ? publicImageUrl(i.img) : '') || null }))
+  };
+  try{ return await slxRpc('senluxe_place_order', { p: payload }, 15000); }
+  catch(e){ if(e && e.server) return { refused: true, message: e.message }; return { skipped: true, error: e }; }
+}
+function slxOrderChannel(channel){ if(!slxApiReady() || !SLX_ORDER_REF) return; slxRpc('senluxe_order_channel', { p_ref: SLX_ORDER_REF, p_channel: channel }, 8000).catch(()=>{}); }
+
+/* ---------- Parcours client : messages personnalisables (gestionnaire › DÉTAILS) ---------- */
+function senluxeApplyExperience(x){
+  SLX_EXPERIENCE = (x && typeof x==='object') ? x : {};
+  const set = (sel, v)=>{ const el = document.querySelector(sel); if(el && typeof v==='string' && v.trim()) el.textContent = v; };
+  set('#confirmOverlay .confirm-modal h2', SLX_EXPERIENCE.confirmTitle);
+  set('#confirmOverlay .confirm-modal p:not(.confirm-thanks)', SLX_EXPERIENCE.confirmText);
+  set('#confirmOverlay .confirm-thanks', SLX_EXPERIENCE.confirmThanks);
+  const btn = document.querySelector('#orderForm button[type="submit"]'); if(btn && SLX_EXPERIENCE.orderButton) btn.textContent = SLX_EXPERIENCE.orderButton;
+  const cons = document.getElementById('slxConsentWrap');
+  if(cons){ cons.hidden = SLX_EXPERIENCE.consentEnabled===false; const t = cons.querySelector('span'); if(t && SLX_EXPERIENCE.consentText) t.textContent = SLX_EXPERIENCE.consentText; }
+}
+
+/* ---------- Référencement ---------- */
+function slxMeta(attr, key, value){
+  let m = document.head.querySelector(`meta[${attr}="${key}"]`);
+  if(!m){ m = document.createElement('meta'); m.setAttribute(attr, key); document.head.appendChild(m); }
+  m.setAttribute('content', value);
+}
+var SLX_SEO_BASE = null;
+function senluxeApplySeo(seo, payload){
+  if(!seo || typeof seo!=='object') return;
+  if(seo.title){ document.title = seo.title; slxMeta('property','og:title', seo.title); slxMeta('name','twitter:title', seo.title); }
+  if(seo.description){ slxMeta('name','description', seo.description); slxMeta('property','og:description', seo.description); slxMeta('name','twitter:description', seo.description); }
+  if(seo.image && /^https:\/\//i.test(seo.image)){ slxMeta('property','og:image', seo.image); slxMeta('name','twitter:image', seo.image); slxMeta('name','twitter:card','summary_large_image'); }
+  if(seo.canonical && /^https:\/\//i.test(seo.canonical)){
+    let l = document.head.querySelector('link[rel="canonical"]'); if(!l){ l = document.createElement('link'); l.rel = 'canonical'; document.head.appendChild(l); }
+    l.href = seo.canonical; slxMeta('property','og:url', seo.canonical);
+  }
+  slxMeta('name','robots', seo.index===false ? 'noindex, nofollow' : 'index, follow');
+  SLX_SEO_BASE = { title: document.title, description: (document.head.querySelector('meta[name="description"]')||{}).content || '' };
+  let ld = document.getElementById('senluxe-jsonld');
+  if(seo.structuredData===false){ if(ld) ld.remove(); return; }
+  const site = seo.canonical || (location.origin + location.pathname);
+  const prods = (payload && Array.isArray(payload.products) ? payload.products : PRODUCTS).filter(p=>p.active!==false).slice(0, 200);
+  const data = [{ '@context':'https://schema.org', '@type':'Organization', name: seo.siteName || 'SEN LUXE', url: site, logo: seo.image || undefined },
+    { '@context':'https://schema.org', '@type':'ItemList', itemListElement: prods.map((p,i)=>({ '@type':'ListItem', position:i+1,
+      item:{ '@type':'Product', name:p.name, url: site.replace(/#.*$/,'') + '#/product/' + (typeof slugify==='function' ? slugify(p.name) : p.id),
+        image: (p.images||[]).filter(u=>/^https:\/\//.test(u)).slice(0,3), category: (typeof categoryLabel==='function' ? categoryLabel(p.cat) : p.cat),
+        offers:{ '@type':'Offer', priceCurrency:'XOF', price:String(p.price), availability: slxAvailable(p) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } } })) }];
+  if(!ld){ ld = document.createElement('script'); ld.type = 'application/ld+json'; ld.id = 'senluxe-jsonld'; document.head.appendChild(ld); }
+  ld.textContent = JSON.stringify(data).replace(/</g,'\\u003c');
+}
+function slxProductMeta(p){
+  if(!p){ if(SLX_SEO_BASE){ document.title = SLX_SEO_BASE.title; if(SLX_SEO_BASE.description) slxMeta('name','description', SLX_SEO_BASE.description); } return; }
+  if(!SLX_SEO_BASE) SLX_SEO_BASE = { title: document.title, description: (document.head.querySelector('meta[name="description"]')||{}).content || '' };
+  document.title = p.name + ' — SEN LUXE';
+  const d = (p.seoDescription || p.description || (p.name + ' — ' + (typeof categoryLabel==='function'?categoryLabel(p.cat):'') + ', ' + fmt(p.price) + '. Livraison rapide au Sénégal.')).slice(0, 160);
+  slxMeta('name','description', d);
+}
+
+/* ---------- Événements de navigation (aucune donnée personnelle) ---------- */
+(function(){
+  const oq = window.openQuickView;
+  if(typeof oq==='function') window.openQuickView = openQuickView = function(id){ const r = oq.apply(this, arguments); try{ const p = PRODUCTS.find(x=>x.id===id); if(p){ senluxeTrack('view', { id:p.id, cat:p.cat, price:p.price }); slxProductMeta(p); } }catch(e){} return r; };
+  const cq = window.closeQuickView;
+  if(typeof cq==='function') window.closeQuickView = closeQuickView = function(){ const r = cq.apply(this, arguments); try{ slxProductMeta(null); }catch(e){} return r; };
+  const ad = window.addToCartDirect;
+  if(typeof ad==='function') window.addToCartDirect = addToCartDirect = function(id){ const r = ad.apply(this, arguments); try{ if(r!==false){ const p = PRODUCTS.find(x=>x.id===id); senluxeTrack('add', { id, cat: p && p.cat, price: p && p.price }); } }catch(e){} return r; };
+})();
 
 /* ================== SECTIONS PERSONNALISÉES & APPARENCE ================== */
 const SENLUXE_ANCHOR_SEL = { hero:'.hero', collections:'#collections', products:'#products', editorial:'.editorial', story:'#story', trust:'#engagements', footer:'footer' };
@@ -3225,46 +3433,132 @@ document.addEventListener('click', e=>{
   const t = e.target.closest('[data-slx-target]'); if(t){ senluxeOpenTarget(t.dataset.slxTarget); }
 });
 
-/* ================== SUPABASE : CONTENU PUBLIÉ (temps réel + relève) ==================
-   Le site affiche d'abord ses données intégrées, puis la dernière version publiée
-   dans Supabase par le gestionnaire. Lecture seule : aucune écriture possible ici. */
-let senluxeRemoteBusy = false, senluxeRemoteAt = '', senluxeRemoteStarted = false;
-async function senluxeRemoteCheck(){
-  if(!senluxeCmsReady() || senluxeRemoteBusy || location.protocol==='blob:') return;
-  senluxeRemoteBusy = true;
+/* ================== SUPABASE : CONTENU PUBLIÉ — SYNCHRONISATION VERSIONNÉE (v4) ==================
+   Source de vérité : la version publiée dans Supabase (table senluxe_site_content, ligne « main »).
+   1. Au chargement : le catalogue intégré s'affiche immédiatement, puis la dernière version publiée.
+   2. Temps réel : abonnement aux numéros de version (senluxe_publications) et au stock (senluxe_stock).
+      Les brouillons ne sont jamais diffusés (RLS : seule la ligne « main » est lisible).
+   3. Reconnexion automatique (attente progressive 1 s → 30 s) et relève périodique de secours :
+      toutes les 15 s si le temps réel est coupé, toutes les 60 s sinon.
+   4. Une version plus ancienne que celle affichée n'est jamais appliquée.
+   Le panier, le filtre actif et la fiche produit ouverte sont conservés pendant la mise à jour. */
+let senluxeRemoteBusy = false, senluxeRemoteAt = '', senluxeRemoteStarted = false, senluxeRemoteQueued = false;
+let senluxeLiveVersion = 0;
+const SLX_SYNC = { ws:null, state:'off', retry:0, lastCheck:0, lastOk:null, lastApply:null, legacy:false, rtLegacy:false, stockAt:0, stockTimer:null, error:'' };
+window.SENLUXE_SYNC_STATUS = SLX_SYNC;
+function slxApiBase(){ return String(SENLUXE_CMS_CONFIG.url||'').replace(/\/+$/,''); }
+function slxApiHeaders(json){ const h = { apikey: SENLUXE_CMS_CONFIG.publicKey }; if(json) h['Content-Type'] = 'application/json'; return h; }
+async function slxRpc(name, args, timeoutMs){
+  const ctl = window.AbortController ? new AbortController() : null;
+  const timer = ctl ? setTimeout(()=>ctl.abort(), timeoutMs || 12000) : null;
   try{
-    const base = SENLUXE_CMS_CONFIG.url.replace(/\/$/,''), h = { apikey: SENLUXE_CMS_CONFIG.publicKey };
-    const r = await fetch(base + '/rest/v1/senluxe_site_content?select=updated_at,stamp:payload->meta->>generatedAt&id=eq.main', { headers:h, cache:'no-store' });
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    const row = (await r.json())[0];
-    if(!row || row.updated_at===senluxeRemoteAt) return;
-    if(row.stamp && senluxeLiveStamp && String(row.stamp) <= String(senluxeLiveStamp)){ senluxeRemoteAt = row.updated_at; return; }
+    const r = await fetch(slxApiBase() + '/rest/v1/rpc/' + name, { method:'POST', headers:slxApiHeaders(true), body:JSON.stringify(args||{}), signal: ctl ? ctl.signal : undefined, cache:'no-store' });
+    const txt = await r.text(); let j = null; try{ j = txt ? JSON.parse(txt) : null; }catch(e){}
+    if(!r.ok){
+      const err = new Error((j && (j.message || j.hint)) || ('HTTP ' + r.status));
+      err.status = r.status; err.code = j && j.code;
+      /* Refus explicite du serveur (validation, stock…) ≠ serveur indisponible ou fonction absente. */
+      err.server = r.status >= 400 && r.status < 500 && r.status !== 404 && !(j && j.code === 'PGRST202') && r.status !== 401 && r.status !== 403;
+      throw err;
+    }
+    return j;
+  }finally{ if(timer) clearTimeout(timer); }
+}
+async function slxStockCheck(force){
+  if(!senluxeCmsReady() || SLX_SYNC.legacy) return;
+  if(!force && Date.now() - SLX_SYNC.stockAt < 20000) return;
+  SLX_SYNC.stockAt = Date.now();
+  try{
+    const r = await fetch(slxApiBase() + '/rest/v1/senluxe_stock?select=product_id,qty', { headers:slxApiHeaders(), cache:'no-store' });
+    if(!r.ok) return;
+    const rows = await r.json(); if(!Array.isArray(rows)) return;
+    const map = new Map(rows.map(x=>[x.product_id, x.qty]));
+    let changed = false;
+    PRODUCTS.forEach(p=>{ if(!map.has(p.id)) return; const q = map.get(p.id); const v = (q===null || q===undefined) ? undefined : Number(q);
+      if((p.stock===undefined || p.stock===null || p.stock==='') ? v!==undefined : Number(p.stock)!==v){ if(v===undefined) delete p.stock; else p.stock = v; changed = true; } });
+    if(changed){
+      if(typeof renderProducts==='function') renderProducts();
+      try{ if(typeof qvProduct!=='undefined' && qvProduct && document.getElementById('qvOverlay') && document.getElementById('qvOverlay').classList.contains('open')) senluxeQvStockState(qvProduct); }catch(e){}
+    }
+  }catch(e){}
+}
+function slxStockSoon(){ clearTimeout(SLX_SYNC.stockTimer); SLX_SYNC.stockTimer = setTimeout(()=>slxStockCheck(true), 600); }
+async function senluxeRemoteCheck(force){
+  if(!senluxeCmsReady() || location.protocol==='blob:') return;
+  if(senluxeRemoteBusy){ senluxeRemoteQueued = true; return; }
+  senluxeRemoteBusy = true; SLX_SYNC.lastCheck = Date.now();
+  try{
+    const base = slxApiBase(), h = slxApiHeaders();
+    if(!SLX_SYNC.legacy && force!==true){
+      const r = await fetch(base + '/rest/v1/senluxe_publications?select=version&order=version.desc&limit=1', { headers:h, cache:'no-store' });
+      if(r.ok){ const row = (await r.json())[0]; const v = row ? Number(row.version) : 0;
+        if(v && senluxeLiveVersion && v <= senluxeLiveVersion){ SLX_SYNC.lastOk = new Date(); SLX_SYNC.error = ''; await slxStockCheck(); return; } }
+      else if(r.status===404 || r.status===400 || r.status===401){ SLX_SYNC.legacy = true; }
+      else throw new Error('HTTP ' + r.status);
+    }
+    const r1 = await fetch(base + '/rest/v1/senluxe_site_content?select=updated_at,stamp:payload->meta->>generatedAt,ver:payload->meta->>version,pub:payload->meta->>publishedAt&id=eq.main', { headers:h, cache:'no-store' });
+    if(!r1.ok) throw new Error('HTTP ' + r1.status);
+    const row = (await r1.json())[0];
+    SLX_SYNC.lastOk = new Date(); SLX_SYNC.error = '';
+    if(!row) return;
+    const rv = Number(row.ver) || 0;
+    if(rv && rv <= senluxeLiveVersion){ senluxeRemoteAt = row.updated_at; await slxStockCheck(); return; }
+    if(!rv && row.updated_at===senluxeRemoteAt) return;
+    /* Contenu publié avant la mise à niveau v4 : règle d'origine (jamais plus ancien que les données intégrées). */
+    if(!row.pub && row.stamp && senluxeLiveStamp && String(row.stamp) <= String(senluxeLiveStamp)){ senluxeRemoteAt = row.updated_at; return; }
     const r2 = await fetch(base + '/rest/v1/senluxe_site_content?select=payload,updated_at&id=eq.main', { headers:h, cache:'no-store' });
     if(!r2.ok) throw new Error('HTTP ' + r2.status);
     const row2 = (await r2.json())[0]; if(!row2 || !row2.payload) return;
     senluxeRemoteAt = row2.updated_at;
-    senluxeLiveApply(row2.payload, (row2.payload.meta && row2.payload.meta.generatedAt) || row2.updated_at);
-  }catch(e){ console.warn('[SEN LUXE] contenu Supabase indisponible ; le catalogue intégré est conservé.', e); }
-  finally{ senluxeRemoteBusy = false; }
+    const meta = row2.payload.meta || {};
+    senluxeLiveApply(row2.payload, meta.generatedAt || row2.updated_at, Number(meta.version) || 0);
+    SLX_SYNC.lastApply = new Date();
+    await slxStockCheck(true);
+  }catch(e){ SLX_SYNC.error = String(e && e.message || e); console.warn('[SEN LUXE] contenu Supabase indisponible ; la dernière version affichée est conservée.', e); }
+  finally{ senluxeRemoteBusy = false; if(senluxeRemoteQueued){ senluxeRemoteQueued = false; setTimeout(senluxeRemoteCheck, 250); } }
+}
+function slxRtRetry(){
+  const wait = Math.min(30000, 1000 * Math.pow(2, SLX_SYNC.retry++)) + Math.floor(Math.random() * 700);
+  setTimeout(()=>{ if(navigator.onLine!==false) senluxeRealtime(); else slxRtRetry(); }, wait);
 }
 function senluxeRealtime(){
   if(!senluxeCmsReady() || !window.WebSocket || location.protocol==='blob:') return;
-  let ws, hb;
-  try{ ws = new WebSocket(SENLUXE_CMS_CONFIG.url.replace(/^http/i, 'ws').replace(/\/$/,'') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(SENLUXE_CMS_CONFIG.publicKey) + '&vsn=1.0.0'); }catch(e){ return; }
-  ws.onopen = ()=>{
-    ws.send(JSON.stringify({ topic:'realtime:senluxe-content', event:'phx_join', ref:'1', payload:{ config:{ broadcast:{ self:false }, presence:{ key:'' }, postgres_changes:[{ event:'*', schema:'public', table:'senluxe_site_content', filter:'id=eq.main' }] } } }));
-    hb = setInterval(()=>{ try{ ws.send(JSON.stringify({ topic:'phoenix', event:'heartbeat', payload:{}, ref:String(Date.now()) })); }catch(e){} }, 25000);
+  if(SLX_SYNC.ws && SLX_SYNC.ws.readyState < 2) return;
+  let ws, hb = null;
+  try{ ws = new WebSocket(slxApiBase().replace(/^http/i, 'ws') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(SENLUXE_CMS_CONFIG.publicKey) + '&vsn=1.0.0'); }
+  catch(e){ SLX_SYNC.state = 'off'; slxRtRetry(); return; }
+  SLX_SYNC.ws = ws; SLX_SYNC.state = 'connecting';
+  const join = ()=>{
+    const changes = SLX_SYNC.rtLegacy
+      ? [{ event:'*', schema:'public', table:'senluxe_site_content', filter:'id=eq.main' }]
+      : [{ event:'INSERT', schema:'public', table:'senluxe_publications' }, { event:'*', schema:'public', table:'senluxe_stock' }, { event:'*', schema:'public', table:'senluxe_site_content', filter:'id=eq.main' }];
+    ws.send(JSON.stringify({ topic:'realtime:senluxe-public', event:'phx_join', ref:'1', join_ref:'1', payload:{ config:{ broadcast:{ self:false }, presence:{ key:'' }, postgres_changes:changes } } }));
   };
-  ws.onmessage = e=>{ try{ const m = JSON.parse(e.data); if(m.event==='postgres_changes') senluxeRemoteCheck(); }catch(_){} };
-  ws.onclose = ()=>{ clearInterval(hb); setTimeout(senluxeRealtime, 20000); };
+  ws.onopen = ()=>{ join(); hb = setInterval(()=>{ try{ ws.send(JSON.stringify({ topic:'phoenix', event:'heartbeat', payload:{}, ref:String(Date.now()) })); }catch(e){} }, 25000); };
+  ws.onmessage = e=>{
+    let m; try{ m = JSON.parse(e.data); }catch(_){ return; }
+    if(m.event==='phx_reply' && m.ref==='1'){
+      if(m.payload && m.payload.status==='ok'){ SLX_SYNC.state = 'live'; SLX_SYNC.retry = 0; senluxeRemoteCheck(); }
+      else if(!SLX_SYNC.rtLegacy){ SLX_SYNC.rtLegacy = true; try{ ws.close(); }catch(_){} }
+      return;
+    }
+    if(m.event==='system' && m.payload && m.payload.status==='error' && !SLX_SYNC.rtLegacy){ SLX_SYNC.rtLegacy = true; try{ ws.close(); }catch(_){} return; }
+    if(m.event==='postgres_changes'){
+      const t = m.payload && m.payload.data && m.payload.data.table;
+      if(t==='senluxe_stock') slxStockSoon(); else senluxeRemoteCheck();
+    }
+  };
+  ws.onclose = ()=>{ clearInterval(hb); if(SLX_SYNC.ws===ws){ SLX_SYNC.state = 'off'; SLX_SYNC.ws = null; } slxRtRetry(); };
   ws.onerror = ()=>{ try{ ws.close(); }catch(_){} };
 }
 function senluxeRemoteStart(){
   if(senluxeRemoteStarted) return; senluxeRemoteStarted = true;
   senluxeRemoteCheck(); senluxeRealtime();
-  setInterval(()=>{ if(!document.hidden) senluxeRemoteCheck(); }, 30000);
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) senluxeRemoteCheck(); });
-  window.addEventListener('online', senluxeRemoteCheck);
+  /* Relève de secours : 15 s sans temps réel, 60 s avec. */
+  setInterval(()=>{ if(document.hidden) return; const every = SLX_SYNC.state==='live' ? 60000 : 15000; if(Date.now() - SLX_SYNC.lastCheck >= every) senluxeRemoteCheck(); }, 5000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ senluxeRemoteCheck(); if(!SLX_SYNC.ws) senluxeRealtime(); } });
+  window.addEventListener('online', ()=>{ senluxeRemoteCheck(); if(!SLX_SYNC.ws){ SLX_SYNC.retry = 0; senluxeRealtime(); } });
+  window.addEventListener('pageshow', e=>{ if(e.persisted) senluxeRemoteCheck(); });
 }
 /* Aperçu du gestionnaire (page blob: dans un cadre) : applique le brouillon reçu. */
 window.addEventListener('message', e=>{
@@ -3287,10 +3581,13 @@ if(SENLUXE_LOCAL_DATA) senluxeCmsApplyPayload(SENLUXE_LOCAL_DATA);
    Une fenêtre ouverte par le bouton « Voir le site » du gestionnaire reçoit aussi
    les mises à jour directement. Sans gestionnaire, rien ne change. */
 /* senluxeLiveStamp / senluxeLivePayload : déclarés en tête de script. */
-function senluxeLiveApply(payload, stamp){
+function senluxeLiveApply(payload, stamp, version){
   if(!payload || typeof payload!=='object' || !Array.isArray(payload.products) || !stamp) return;
-  if(senluxeLiveStamp && String(stamp) <= String(senluxeLiveStamp)) return;
+  const v = Number(version) || Number(payload.meta && payload.meta.version) || 0;
+  if(v){ if(v <= senluxeLiveVersion) return; senluxeLiveVersion = v; }
+  else if(senluxeLiveStamp && String(stamp) <= String(senluxeLiveStamp)) return;
   senluxeLiveStamp = String(stamp);
+  try{ document.documentElement.classList.add('slx-live-updated'); setTimeout(()=>document.documentElement.classList.remove('slx-live-updated'), 900); }catch(e){}
   senluxeLivePayload = payload;
   try{ senluxeCmsApplyPayload(payload); }catch(e){ console.warn('[SEN LUXE] mise à jour en direct impossible', e); }
 }
@@ -3355,6 +3652,8 @@ document.addEventListener('visibilitychange', senluxeLiveCheck);
   document.body.appendChild(b);
 })();
 
+slxRestoreCartLocal();
+(function(){ const l = document.getElementById('orderWhatsAppLink'); if(l) l.addEventListener('click', ()=>slxOrderChannel('whatsapp')); })();
 if(senluxeCmsReady()){senluxeRemoteStart();}
 </script>
 </body>
