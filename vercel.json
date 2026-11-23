@@ -1,0 +1,17 @@
+{
+  "cleanUrls": false,
+  "headers": [
+    { "source": "/gestionnaire/(.*)", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+      { "key": "Cache-Control", "value": "no-store" },
+      { "key": "X-Frame-Options", "value": "DENY" },
+      { "key": "Referrer-Policy", "value": "no-referrer" } ] },
+    { "source": "/gestionnaire", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+      { "key": "Cache-Control", "value": "no-store" } ] },
+    { "source": "/", "headers": [
+      { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" } ] },
+    { "source": "/index.html", "headers": [
+      { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" } ] }
+  ]
+}
