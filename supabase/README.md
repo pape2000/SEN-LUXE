@@ -16,6 +16,6 @@ Ne jamais écrire le code temporaire dans un fichier du dépôt.
    (avant : seulement signalée). Totaux et frais de livraison toujours recalculés par le serveur.
 
 ## Retour arrière
-- Git : le tag `pre-v5-e04bef4` pointe vers l'état de production d'avant cette version.
+- Git : les branches `backup/pre-senluxe-repair-20261118` et `backup/senluxe-before-supabase-fix-2026-11-18` pointent vers e04bef4, l'état de production d'avant cette version.
 - Vercel : le déploiement `dpl_7x2HY8DmpZJtHhiHMZ431eR2P2na` (commit e04bef4) peut être re-promu en production.
 - Supabase « sen luxe » : copie complète des tables avant migration dans le schéma privé `backup_20261123`.
