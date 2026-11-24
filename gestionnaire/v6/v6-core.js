@@ -40,7 +40,7 @@
       var st = await rpc('senluxe_admin_settings', { p_token: ADM.pass }) || {};
       KEYS.forEach(function(k){ if(st[k] !== undefined && st[k] !== null) { V6.cfg[k] = merged(k, st[k]); V6.sync[k] = 'server'; } });
       writeLocal(); V6.serverLoaded = true; V6.applyAll();
-      if((UI.view === 'settings' || UI.view === 'studio') && !document.querySelector('.v6-editing')) render();
+      if((UI.view === 'settings' || UI.view === 'studio') && !document.querySelector('.v6-editing')) V6.rerender();
     }catch(e){ V6.syncErr = e.message; }
     V6.loading = false;
   };
@@ -106,7 +106,7 @@
   /* ---- animation d'entrée de rubrique (sans clignoter lors des simples re-rendus) ---- */
   var _setView = window.setView;
   if(typeof _setView === 'function'){
-    window.setView = function(v){ var r = _setView.apply(this, arguments); var el = document.getElementById('view'); if(el){ el.classList.remove('v6e'); void el.offsetWidth; el.classList.add('v6e'); } return r; };
+    window.setView = function(v){ var el0 = document.getElementById('view'); if(el0 && el0.__v6key && el0.__v6key.split(':')[0] !== v) el0.__v6key = null; var r = _setView.apply(this, arguments); var el = document.getElementById('view'); if(el){ el.classList.remove('v6e'); void el.offsetWidth; el.classList.add('v6e'); clearTimeout(V6._ev); V6._ev = setTimeout(function(){ el.classList.remove('v6e'); }, 1400); } return r; };
   }
 
   /* ---- rendu des rubriques ---- */
@@ -115,7 +115,7 @@
   V6.tabsHtml = function(view, list){
     return '<div class="v6-tabs" role="tablist">' + list.map(function(t){ return '<button type="button" role="tab" aria-selected="' + (V6.tab[view] === t[0]) + '" class="' + (V6.tab[view] === t[0] ? 'on' : '') + '" data-act="v6Tab" data-arg="' + view + ':' + t[0] + '">' + h(t[1]) + '</button>'; }).join('') + '</div>';
   };
-  V6.render = function(v){
+  V6.render = function(v, force, syncOnly){
     V6.loadServer();
     var view = UI.view, tab = V6.tab[view], body = '';
     try{
@@ -123,11 +123,21 @@
       else body = (V6.studioBody ? V6.studioBody(tab) : '<p class="muted">Module indisponible.</p>');
     }catch(e){ console.error(e); body = '<div class="banner">Cette section a rencontré une erreur : ' + h(e.message) + '. Le reste du gestionnaire n\'est pas affecté.</div>'; }
     var head = view === 'settings' ? ['PARAMÈTRES', 'Sécurité, fonctionnalités, intégrations et préférences.', V6.SETTINGS_TABS] : ['COULEURS ET ANIMATIONS', 'Apparence du gestionnaire et du site web, bibliothèque d\'animations.', V6.STUDIO_TABS];
-    v.innerHTML = '<div class="v6-wrap" data-v6-view="' + view + '"><div class="v6-head"><h2>' + head[0] + '</h2><p>' + head[1] + '</p></div>' + V6.tabsHtml(view, head[2]) + '<div class="v6-body">' + body + '</div></div>';
+    var html = '<div class="v6-wrap" data-v6-view="' + view + '"><div class="v6-head"><h2>' + head[0] + '</h2><p>' + head[1] + '</p></div>' + V6.tabsHtml(view, head[2]) + '<div class="v6-body">' + body + '</div></div>';
+    /* Garde-fous anti-clignotement : (1) HTML identique => on ne touche pas au DOM ; (2) un rendu déclenché par le reste de
+     * l'application (synchronisation, temps réel) ne remplace jamais l'écran pendant qu'un champ est en cours de saisie. */
+    if(syncOnly){ v.__v6html = html; return; }
+    var same = v.__v6key === view + ':' + tab && v.querySelector('.v6-wrap');
+    if(same && v.__v6html === html) return;
+    var ae = document.activeElement;
+    if(same && !force && ae && v.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)){ V6.skipped = (V6.skipped || 0) + 1; return; }
+    var y = window.scrollY, bodyEl = v.querySelector('.v6-body'), keep = same && bodyEl ? bodyEl.scrollLeft : 0;
+    v.innerHTML = html; v.__v6html = html; v.__v6key = view + ':' + tab;
+    if(same) window.scrollTo(0, y);
     if(view === 'studio' && tab === 'site' && typeof apMountPreview === 'function') apMountPreview();
     if(V6.afterRender) V6.afterRender(view, tab);
   };
-  V6.rerender = function(){ var y = window.scrollY; if(UI.view === 'settings' || UI.view === 'studio'){ V6.render(document.getElementById('view')); window.scrollTo(0, y); } };
+  V6.rerender = function(){ if(UI.view === 'settings' || UI.view === 'studio') V6.render(document.getElementById('view'), true); };
   Object.assign(ACT_EXTRA, {
     v6Tab: function(a){ var p = String(a).split(':'); if(!V6.tab[p[0]]) return; V6.tab[p[0]] = p[1]; V6.rerender(); }
   });

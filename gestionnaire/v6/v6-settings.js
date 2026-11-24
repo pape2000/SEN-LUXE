@@ -8,27 +8,37 @@
   var needLogin = '<div class="banner">Connectez-vous (écran d\'accès administrateur) pour utiliser cette section : elle lit et écrit sur le serveur.</div>';
 
   /* ======================= SÉCURITÉ ======================= */
-  V6.sec = { status: null, err: '', hist: null, busy: false };
-  async function secLoad(force){
-    if(!connected() || V6.sec.busy || (V6.sec.status && !force)) return; V6.sec.busy = true;
-    try{ V6.sec.status = await rpc('senluxe_admin_security_status', { p_token: ADM.pass }); V6.sec.err = ''; }
-    catch(e){ V6.sec.err = miss(e) ? 'migration' : e.message; V6.sec.status = null; }
-    try{ if(!V6.sec.err) V6.sec.hist = await rpc('senluxe_admin_recovery_history', { p_token: ADM.pass }); }catch(e){}
-    V6.sec.busy = false; if(UI.view === 'settings' && V6.tab.settings === 'security') V6.rerender();
-  }
+  V6.sec = { status: null, err: '', hist: null, busy: false, tried: 0 };
   function badge(t, cls){ return '<span class="v6-badge ' + (cls || '') + '">' + h(t) + '</span>'; }
-  function secTab(){
-    if(!connected()) return needLogin;
-    setTimeout(function(){ secLoad(false); }, 0);
+  /* Partie dynamique (état serveur) : mise à jour SUR PLACE, sans refaire toute la page. */
+  function secDyn(){
     var st = V6.sec.status, e = V6.sec.err, r = st && st.recovery, k = '';
     if(e === 'migration') k = '<div class="banner">Le module « code de secours » n\'est pas encore installé sur le serveur (migration v6 non appliquée). Les fonctions de sécurité existantes (changement de code, sessions, journal) restent disponibles ci-dessous.</div>';
     else if(e) k = '<div class="banner">' + h(e) + '</div>';
     var card = st ? '<div class="v6-kpis"><div class="v6-kpi"><span>Dernier changement du code</span><b>' + h(st.password_changed_at ? dateFr(st.password_changed_at) : '—') + '</b></div><div class="v6-kpi"><span>Sessions ouvertes</span><b>' + h(st.sessions_active) + '</b></div><div class="v6-kpi"><span>Échecs (24 h)</span><b>' + h(st.failures_24h) + '</b></div><div class="v6-kpi"><span>Code de secours</span><b>' + (r && r.active ? badge('actif', 'ok') : r && r.used_at ? badge('utilisé', 'warn') : r && r.revoked_at ? badge('révoqué', 'warn') : badge('non créé')) + '</b></div></div>' : (e ? '' : '<p class="muted">Chargement de l\'état de sécurité…</p>');
     var hist = Array.isArray(V6.sec.hist) && V6.sec.hist.length ? '<div class="an-table-wrap"><table class="an-table"><thead><tr><th>Date</th><th>Événement</th></tr></thead><tbody>' + V6.sec.hist.map(function(x){ var L = { recuperation_code_genere: 'Code de secours généré', recuperation_code_revoque: 'Code de secours révoqué', recuperation_reussie: 'Récupération réussie', recuperation_echec: 'Tentative de récupération échouée' }; return '<tr><td>' + h(dateFr(x.at)) + '</td><td>' + h(L[x.action] || x.action) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted">Aucun événement de récupération.</p>';
     var rec = e === 'migration' ? '' : '<h3 class="se-h">Code de secours</h3><p class="hint" style="margin-top:0">Un code à usage unique, conservé <b>haché</b> sur le serveur, qui permet de choisir un nouveau code si vous oubliez l\'actuel (« Code oublié ? » sur l\'écran de connexion). Il n\'est affiché qu\'<b>une seule fois</b> : notez-le hors ligne. Générer un nouveau code révoque l\'ancien.</p><div class="v6-row"><button type="button" class="btn dark" data-act="v6RecGen">' + (r && r.active ? 'Renouveler le code de secours' : 'Générer un code de secours') + '</button>' + (r && r.active ? '<button type="button" class="btn ghost" data-act="v6RecRevoke">Révoquer</button>' : '') + '</div><h4 class="v6-h4">Historique</h4>' + hist;
+    return k + card + rec;
+  }
+  /* Une seule tentative par minute (et jamais en boucle) ; le résultat met à jour uniquement le bloc dynamique. */
+  async function secLoad(force){
+    if(!connected() || V6.sec.busy) return;
+    if(!force && V6.sec.tried && Date.now() - V6.sec.tried < 60000) return;
+    V6.sec.busy = true; V6.sec.tried = Date.now();
+    var before = JSON.stringify([V6.sec.status, V6.sec.err, V6.sec.hist]);
+    try{ V6.sec.status = await rpc('senluxe_admin_security_status', { p_token: ADM.pass }); V6.sec.err = ''; }
+    catch(e){ V6.sec.err = miss(e) ? 'migration' : e.message; V6.sec.status = null; }
+    try{ if(!V6.sec.err) V6.sec.hist = await rpc('senluxe_admin_recovery_history', { p_token: ADM.pass }); }catch(e){}
+    V6.sec.busy = false;
+    if(JSON.stringify([V6.sec.status, V6.sec.err, V6.sec.hist]) === before) return;
+    var el = document.getElementById('v6-sec-dyn'); if(el && UI.view === 'settings' && V6.tab.settings === 'security'){ el.innerHTML = secDyn(); var v = document.getElementById('view'); if(v) V6.render(v, true, true); }
+  }
+  function secTab(){
+    if(!connected()) return needLogin;
+    if(!V6.sec.tried) setTimeout(function(){ secLoad(false); }, 0);
     var tf = '<h3 class="se-h">Double authentification (2FA)</h3><div class="v6-note"><b>Architecture prévue, non activée.</b> L\'emplacement serveur et l\'interface sont réservés ; aucune fausse protection n\'est affichée. Elle sera proposée lorsqu\'elle sera réellement vérifiable.</div>';
     var prot = '<h3 class="se-h">Protections actives</h3><ul class="v4-checks"><li class="ok">Code haché en bcrypt côté serveur ; jamais présent dans le HTML ni dans le navigateur.</li><li class="ok">Verrouillage après 10 échecs en 15 minutes, avec temporisation progressive et alerte d\'activité suspecte.</li><li class="ok">Sessions : jeton aléatoire révocable, 12 h d\'inactivité maximum, 7 jours au total ; restaurées après un rechargement uniquement après vérification serveur.</li><li class="ok">Code temporaire : changement obligatoire à la première connexion.</li></ul>';
-    return k + card + rec + tf + prot + '<h3 class="se-h">Sessions, changement de code et journal</h3>' + (typeof dtSecurity === 'function' ? dtSecurity() : '');
+    return '<div id="v6-sec-dyn">' + secDyn() + '</div>' + tf + prot + '<h3 class="se-h">Sessions, changement de code et journal</h3>' + (typeof dtSecurity === 'function' ? dtSecurity() : '');
   }
   function askCurrent(title, intro, cb){
     var m = openModal({ title: title, body: '<p class="hint" style="margin-top:0">' + intro + '</p><div class="field"><label for="v6cur">Code administrateur actuel</label><input type="password" id="v6cur" autocomplete="current-password"></div><p id="v6cs" class="hint" aria-live="polite"></p>', foot: '<button type="button" class="btn ghost" data-close>Annuler</button><button type="button" class="btn dark" id="v6ok">Continuer</button>' });
@@ -41,9 +51,9 @@
         requestClose(m); var code = r.code;
         var m2 = openModal({ title: 'Votre code de secours', body: '<p class="hint" style="margin-top:0"><b>Notez-le maintenant.</b> Il ne sera plus jamais affiché. Rangez-le hors ligne, séparément de votre code habituel.</p><div class="v6-code" id="v6code">' + h(code) + '</div><div class="v6-row"><button type="button" class="btn" id="v6cp">Copier</button></div>', foot: '<button type="button" class="btn dark" data-close>J\'ai noté mon code</button>', onClose: function(){ var el = $q('#v6code'); if(el) el.textContent = ''; code = null; } });
         $q('#v6cp', m2.wrap).onclick = function(){ try{ navigator.clipboard.writeText(code); toast('Code copié.'); }catch(e){ toast('Copie impossible : recopiez-le à la main.', 'err'); } };
-        V6.sec.status = null; secLoad(true); return true; }catch(e){ return e.message; } }); },
+        secLoad(true); return true; }catch(e){ return e.message; } }); },
     v6RecRevoke: function(){ askCurrent('Révoquer le code de secours', 'Le code de secours actuel cessera de fonctionner.', async function(cur, m){
-      try{ var r = await rpc('senluxe_admin_recovery_revoke', { p_token: ADM.pass, p_current: cur }); if(!r || !r.ok) return (r && r.error) || 'Refusé.'; requestClose(m); toast('Code de secours révoqué.'); V6.sec.status = null; secLoad(true); return true; }catch(e){ return e.message; } }); }
+      try{ var r = await rpc('senluxe_admin_recovery_revoke', { p_token: ADM.pass, p_current: cur }); if(!r || !r.ok) return (r && r.error) || 'Refusé.'; requestClose(m); toast('Code de secours révoqué.'); secLoad(true); return true; }catch(e){ return e.message; } }); }
   });
 
   /* ======================= AUTRES PARAMÈTRES (A–Z) ======================= */
