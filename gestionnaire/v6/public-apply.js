@@ -121,13 +121,14 @@
   }
   var lastMotion = null;
   function applyMotion(p){
-    var m = p && p.motion && typeof p.motion === 'object' ? p.motion : null, key = JSON.stringify(m || null);
+    var R = window.SLX_UNIVERSES ? SLX_UNIVERSES.resolve(p) : { on: !!(p && p.motion), motion: (p && p.motion) || {}, scripts: [] };
+    var key = JSON.stringify(R);
     if(key === lastMotion) return; lastMotion = key;
-    if(!window.SLX_MOTION) return;
-    if(!m || !Object.keys(m).length){ SLX_MOTION.uninstall(); return; }
-    SLX_MOTION.install(m, SLX_MOTION.TARGETS.public);
+    if(window.SLX_MOTION){ if(!R.on || !Object.keys(R.motion).length) SLX_MOTION.uninstall(); else SLX_MOTION.install(R.motion, SLX_MOTION.TARGETS.public); }
+    if(window.SLX_SCRIPT){ if(!R.on || !R.scripts.length) SLX_SCRIPT.uninstall(); else SLX_SCRIPT.install(R.scripts, 'public'); }
   }
-  window.slxV6Apply = function(p){ try{ applyMotion(p); }catch(e){} try{ applyAnim(p); }catch(e){} try{ applyElements(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
+  function masterOff(p){ return !!(p && p.motionMaster && p.motionMaster.on === false); }
+  window.slxV6Apply = function(p){ try{ applyMotion(p); }catch(e){} try{ applyAnim(masterOff(p) ? {} : p); }catch(e){} try{ applyElements(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
   if(window.parent !== window){
     window.addEventListener('message', function(e){ if(e.source !== window.parent) return; var m = e.data; if(m && m.type === 'senluxe-preview' && m.payload) window.slxV6Apply(m.payload); });
   }

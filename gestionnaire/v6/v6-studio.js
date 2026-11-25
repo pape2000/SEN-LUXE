@@ -135,7 +135,7 @@
   /* ===================== STUDIO : SITE WEB ===================== */
   var SITE_TARGET_LABELS = { hero: 'Texte du Hero (au chargement)', reveal: 'Apparition des sections (au défilement)', cards: 'Cartes produits (au chargement)', cardHover: 'Cartes produits (au survol)', buttons: 'Boutons (au survol)', images: 'Images produits (au survol)' };
   function siteState(){
-    var d = JSON.stringify([D().theme || {}, D().animApply || {}, D().motion || {}]), p = JSON.stringify([S.published.theme || {}, S.published.animApply || {}, S.published.motion || {}]);
+    var d = JSON.stringify([D().theme || {}, D().animApply || {}, D().motion || {}, D().motionMaster || {}, D().motionScripts || []]), p = JSON.stringify([S.published.theme || {}, S.published.animApply || {}, S.published.motion || {}, S.published.motionMaster || {}, S.published.motionScripts || []]);
     return d === p ? ['Publié — identique au site public', 'ok'] : ['Brouillon — non publié', 'warn'];
   }
   var ELS = [
@@ -187,7 +187,9 @@
     cleanSiteLib(); await persist();
     await publishPart(function(p){ p.theme = cl(D().theme || {}); AP_TEXT_KEYS.forEach(function(k){ p.home[k] = cl(D().home[k]); }); var order = D().products.map(function(x){ return x.id; }); p.products.sort(function(a, b){ var i = order.indexOf(a.id), j = order.indexOf(b.id); return (i < 0 ? 1e9 : i) - (j < 0 ? 1e9 : j); });
       if(D().animApply){ p.animApply = cl(D().animApply); p.animLib = cl(D().animLib || []); } else { delete p.animApply; delete p.animLib; }
-      if(D().motion && Object.keys(D().motion).length) p.motion = cl(D().motion); else delete p.motion; }, 'Apparence et animations publiées');
+      if(D().motion && Object.keys(D().motion).length) p.motion = cl(D().motion); else delete p.motion;
+      if(D().motionMaster) p.motionMaster = cl(D().motionMaster); else delete p.motionMaster;
+      if(D().motionScripts && D().motionScripts.length) p.motionScripts = cl(D().motionScripts); else delete p.motionScripts; }, 'Apparence et animations publiées');
     V6.rerender();
   };
   Object.assign(ACT_EXTRA, {
@@ -293,7 +295,7 @@
 
   /* ===================== PUBLIC : aperçu enrichi ===================== */
   V6.pubJs = '';
-  Promise.all(['anim-validate.js', 'motion.js', 'public-apply.js'].map(function(f){ return fetch('v6/' + f, { cache: 'no-store' }).then(function(r){ return r.ok ? r.text() : ''; }); })).then(function(a){ V6.pubJs = a.join('\n'); }).catch(function(){});
+  Promise.all(['anim-validate.js', 'motion.js', 'mscript.js', 'universes.js', 'public-apply.js'].map(function(f){ return fetch('v6/' + f, { cache: 'no-store' }).then(function(r){ return r.ok ? r.text() : ''; }); })).then(function(a){ V6.pubJs = a.join('\n'); }).catch(function(){});
   var _pv = window.previewHtml;
   if(typeof _pv === 'function') window.previewHtml = function(){ var html = _pv.apply(this, arguments); if(!V6.pubJs || typeof html !== 'string' || /id="slx-v6-public"/.test(html)) return html; var i = html.lastIndexOf('</body>'); var tag = '<script id="slx-v6-public">' + V6.pubJs.replace(/<\/script/gi, '<\\/script') + '<\/script>'; return i < 0 ? html + tag : html.slice(0, i) + tag + html.slice(i); };
 

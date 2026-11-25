@@ -5,14 +5,15 @@
   var off = false; try{ off = /[?&]v6=off\b/.test(location.search) || localStorage.getItem('slx_v6_off') === '1'; }catch(e){}
   if(off || typeof S === 'undefined' || typeof ACT_EXTRA === 'undefined') return;
 
-  var KEYS = ['mgr_prefs', 'mgr_theme', 'mgr_anim', 'mgr_animlib', 'v6_notify', 'v6_notifs'];
+  var KEYS = ['mgr_prefs', 'mgr_theme', 'mgr_anim', 'mgr_animlib', 'v6_notify', 'v6_notifs', 'v6_scripts'];
   var DEFAULTS = {
     mgr_prefs: { density: 'normal', startView: '', reduceMotion: false, hideHints: false },
     mgr_theme: { preset: 'classic', dark: false, colors: {}, radius: null, font: null, sidebar: null, btn: null },
     mgr_anim: { style: 'none', speed: 1, apply: {}, motion: {} },
     mgr_animlib: [],
     v6_notify: { emails: [], whatsapp: [], events: { order: true, stock: false }, lastTest: null },
-    v6_notifs: { read: {}, archived: {}, seen: {} }
+    v6_notifs: { read: {}, archived: {}, seen: {} },
+    v6_scripts: []
   };
   var V6 = window.V6 = { version: '6.0.0', cfg: {}, sync: {}, serverLoaded: false, tab: { settings: 'security', studio: 'manager', notifs: 'all' } };
   var h = function(s){ return esc(s); };
@@ -108,8 +109,9 @@
 
   V6.applyMotion = function(){
     if(typeof SLX_MOTION === 'undefined') return;
-    var m = (V6.cfg.mgr_anim || {}).motion, pr = V6.cfg.mgr_prefs, key = JSON.stringify([m || null, !!pr.reduceMotion, V6.cfg.mgr_anim.speed]);
+    var m = (V6.cfg.mgr_anim || {}).motion, pr = V6.cfg.mgr_prefs, scr = (V6.cfg.mgr_anim || {}).scripts || [], key = JSON.stringify([m || null, !!pr.reduceMotion, V6.cfg.mgr_anim.speed, scr]);
     if(key === V6._mk) return; V6._mk = key;
+    if(typeof SLX_SCRIPT !== 'undefined'){ if(pr.reduceMotion || !scr.length) SLX_SCRIPT.uninstall(); else SLX_SCRIPT.install(scr, 'manager', { gate: function(){ var v = document.getElementById('view'); return !v || v.classList.contains('v6e'); } }); }
     if(!m || pr.reduceMotion || !Object.keys(m).length){ SLX_MOTION.uninstall(); return; }
     var cfg = {}; Object.keys(m).forEach(function(k){ cfg[k] = Object.assign({}, m[k], { speed: (m[k].speed || 1) * (V6.cfg.mgr_anim.speed || 1) }); });
     SLX_MOTION.install(cfg, SLX_MOTION.TARGETS.manager, { gate: function(){ var v = document.getElementById('view'); return !v || v.classList.contains('v6e'); } });

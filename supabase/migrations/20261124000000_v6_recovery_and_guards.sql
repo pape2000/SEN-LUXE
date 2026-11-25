@@ -41,7 +41,7 @@ $$;
 -- -------------------------------------------------------------------------------------
 create or replace function public.senluxe_v6_guard() returns trigger
 language plpgsql set search_path = public as $$
-declare a jsonb := new.payload -> 'animLib'; mo jsonb := new.payload -> 'motion'; el jsonb := new.payload -> 'theme' -> 'elements'; it jsonb; ig jsonb := new.payload -> 'integrations'; k text; v jsonb; idv text;
+declare a jsonb := new.payload -> 'animLib'; mo jsonb := new.payload -> 'motion'; mm jsonb := new.payload -> 'motionMaster'; ms jsonb := new.payload -> 'motionScripts'; el jsonb := new.payload -> 'theme' -> 'elements'; it jsonb; ig jsonb := new.payload -> 'integrations'; k text; v jsonb; idv text;
 begin
   if a is not null and jsonb_typeof(a) = 'array' then
     if jsonb_array_length(a) > 60 then raise exception 'Trop d''animations personnalisées (60 maximum).'; end if;
@@ -55,6 +55,16 @@ begin
     if (select count(*) from jsonb_object_keys(mo)) > 16 then raise exception 'Trop de zones d''animation.'; end if;
     for k, v in select * from jsonb_each(mo) loop
       if jsonb_typeof(v) <> 'object' or coalesce(v ->> 'b', '') !~ '^[a-z][a-z-]{1,30}$' or k !~ '^[a-z]{2,20}$' then raise exception 'Animation de zone invalide (%).', left(k, 20); end if;
+    end loop;
+  end if;
+  if mm is not null and (jsonb_typeof(mm) <> 'object' or exists (select 1 from jsonb_object_keys(mm) k where k not in ('on', 'universe', 'mute')) or coalesce(mm ->> 'universe', '') !~ '^([a-z][a-z-]{1,20})?$') then
+    raise exception 'Réglage général de motion invalide.';
+  end if;
+  if ms is not null then
+    if jsonb_typeof(ms) <> 'array' or jsonb_array_length(ms) > 30 then raise exception 'Animations en code : 30 maximum.'; end if;
+    if ms::text ~* '(javascript|url\s*\(|expression|<|>|`|\\|;|@)' then raise exception 'Animation en code refusée : contenu non autorisé.'; end if;
+    for v in select * from jsonb_array_elements(ms) loop
+      if jsonb_typeof(v) <> 'object' or jsonb_typeof(v -> 'spec') <> 'object' or coalesce(v -> 'spec' ->> 'target', '') !~ '^[a-z]{2,20}$' then raise exception 'Animation en code invalide.'; end if;
     end loop;
   end if;
   if el is not null and jsonb_typeof(el) = 'object' then
