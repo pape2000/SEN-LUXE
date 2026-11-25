@@ -5,14 +5,16 @@
   var off = false; try{ off = /[?&]v6=off\b/.test(location.search) || localStorage.getItem('slx_v6_off') === '1'; }catch(e){}
   if(off || typeof S === 'undefined' || typeof ACT_EXTRA === 'undefined') return;
 
-  var KEYS = ['mgr_prefs', 'mgr_theme', 'mgr_anim', 'mgr_animlib'];
+  var KEYS = ['mgr_prefs', 'mgr_theme', 'mgr_anim', 'mgr_animlib', 'v6_notify', 'v6_notifs'];
   var DEFAULTS = {
     mgr_prefs: { density: 'normal', startView: '', reduceMotion: false, hideHints: false },
     mgr_theme: { preset: 'classic', dark: false, colors: {}, radius: null, font: null, sidebar: null, btn: null },
     mgr_anim: { style: 'none', speed: 1, apply: {}, motion: {} },
-    mgr_animlib: []
+    mgr_animlib: [],
+    v6_notify: { emails: [], whatsapp: [], events: { order: true, stock: false }, lastTest: null },
+    v6_notifs: { read: {}, archived: {}, seen: {} }
   };
-  var V6 = window.V6 = { version: '6.0.0', cfg: {}, sync: {}, serverLoaded: false, tab: { settings: 'security', studio: 'manager' } };
+  var V6 = window.V6 = { version: '6.0.0', cfg: {}, sync: {}, serverLoaded: false, tab: { settings: 'security', studio: 'manager', notifs: 'all' } };
   var h = function(s){ return esc(s); };
   V6.h = h;
 
@@ -119,7 +121,7 @@
   }
 
   /* ---- rendu des rubriques ---- */
-  V6.SETTINGS_TABS = [['security', 'Sécurité'], ['features', 'Autres paramètres'], ['pixels', 'Pixels et intégrations'], ['prefs', 'Préférences générales']];
+  V6.SETTINGS_TABS = [['security', 'Sécurité'], ['features', 'Autres paramètres'], ['pixels', 'Pixels et intégrations'], ['notify', 'Notifications de commande'], ['prefs', 'Préférences générales']];
   V6.STUDIO_TABS = [['manager', 'Gestionnaire'], ['site', 'SITE WEB'], ['library', 'Bibliothèque et création']];
   V6.tabsHtml = function(view, list){
     return '<div class="v6-tabs" role="tablist">' + list.map(function(t){ return '<button type="button" role="tab" aria-selected="' + (V6.tab[view] === t[0]) + '" class="' + (V6.tab[view] === t[0] ? 'on' : '') + '" data-act="v6Tab" data-arg="' + view + ':' + t[0] + '">' + h(t[1]) + '</button>'; }).join('') + '</div>';
@@ -128,11 +130,12 @@
     V6.loadServer();
     var view = UI.view, tab = V6.tab[view], body = '';
     try{
-      if(view === 'settings') body = (V6.settingsBody ? V6.settingsBody(tab) : '<p class="muted">Module indisponible.</p>');
+      if(view === 'notifs') body = (V6.notifBody ? V6.notifBody() : '');
+      else if(view === 'settings') body = (V6.settingsBody ? V6.settingsBody(tab) : '<p class="muted">Module indisponible.</p>');
       else body = (V6.studioBody ? V6.studioBody(tab) : '<p class="muted">Module indisponible.</p>');
     }catch(e){ console.error(e); body = '<div class="banner">Cette section a rencontré une erreur : ' + h(e.message) + '. Le reste du gestionnaire n\'est pas affecté.</div>'; }
-    var head = view === 'settings' ? ['PARAMÈTRES', 'Sécurité, fonctionnalités, intégrations et préférences.', V6.SETTINGS_TABS] : ['COULEURS ET ANIMATIONS', 'Apparence du gestionnaire et du site web, bibliothèque d\'animations.', V6.STUDIO_TABS];
-    var html = '<div class="v6-wrap" data-v6-view="' + view + '"><div class="v6-head"><h2>' + head[0] + '</h2><p>' + head[1] + '</p></div>' + V6.tabsHtml(view, head[2]) + '<div class="v6-body">' + body + '</div></div>';
+    var head = view === 'notifs' ? ['CENTRE DE NOTIFICATIONS', 'Messages techniques et d\'administration, classés par priorité.', []] : view === 'settings' ? ['PARAMÈTRES', 'Sécurité, fonctionnalités, intégrations et préférences.', V6.SETTINGS_TABS] : ['COULEURS ET ANIMATIONS', 'Apparence du gestionnaire et du site web, bibliothèque d\'animations.', V6.STUDIO_TABS];
+    var html = '<div class="v6-wrap" data-v6-view="' + view + '"><div class="v6-head"><h2>' + head[0] + '</h2><p>' + head[1] + '</p></div>' + (head[2].length ? V6.tabsHtml(view, head[2]) : '') + '<div class="v6-body">' + body + '</div></div>';
     /* Garde-fous anti-clignotement : (1) HTML identique => on ne touche pas au DOM ; (2) un rendu déclenché par le reste de
      * l'application (synchronisation, temps réel) ne remplace jamais l'écran pendant qu'un champ est en cours de saisie. */
     if(syncOnly){ v.__v6html = html; return; }
@@ -146,7 +149,7 @@
     if(view === 'studio' && tab === 'site' && typeof apMountPreview === 'function') apMountPreview();
     if(V6.afterRender) V6.afterRender(view, tab);
   };
-  V6.rerender = function(){ if(UI.view === 'settings' || UI.view === 'studio') V6.render(document.getElementById('view'), true); };
+  V6.rerender = function(){ if(UI.view === 'settings' || UI.view === 'studio' || UI.view === 'notifs') V6.render(document.getElementById('view'), true); };
   Object.assign(ACT_EXTRA, {
     v6Tab: function(a){ var p = String(a).split(':'); if(!V6.tab[p[0]]) return; V6.tab[p[0]] = p[1]; V6.rerender(); }
   });
@@ -178,7 +181,7 @@
 
   /* ---- démarrage ---- */
   V6.applyAll(); gateLink();
-  ['navSettings', 'navStudio'].forEach(function(id){ var b = document.getElementById(id); if(b) b.hidden = false; });
+  ['navSettings', 'navStudio', 'navNotif'].forEach(function(id){ var b = document.getElementById(id); if(b) b.hidden = false; });
   var tries = 0, iv = setInterval(function(){ V6.loadServer(); if(V6.serverLoaded || ++tries > 60) clearInterval(iv); }, 2000);
-  var sv = V6.cfg.mgr_prefs.startView; if(sv && /^(home|products|orders|carts|settings|studio|details)$/.test(sv) && typeof setView === 'function'){ setTimeout(function(){ try{ setView(sv); }catch(e){} }, 0); }
+  var sv = V6.cfg.mgr_prefs.startView; if(sv && /^(home|products|orders|carts|settings|studio|details|notifs)$/.test(sv) && typeof setView === 'function'){ setTimeout(function(){ try{ setView(sv); }catch(e){} }, 0); }
 })();

@@ -138,6 +138,28 @@
     var d = JSON.stringify([D().theme || {}, D().animApply || {}, D().motion || {}]), p = JSON.stringify([S.published.theme || {}, S.published.animApply || {}, S.published.motion || {}]);
     return d === p ? ['Publié — identique au site public', 'ok'] : ['Brouillon — non publié', 'warn'];
   }
+  var ELS = [
+    ['Fonds', [['pageBg', 'Fond de la page', 'Toute la page (derrière les sections)', '#ffffff'], ['sectionBg', 'Fond des sections claires', 'Collections et bloc contact/newsletter', '#faf9f6'], ['storyBg', 'Fond de la section « Notre histoire »', 'Bloc sombre de présentation', '#0a0a0a'], ['catStripBg', 'Fond de la barre de catégories', 'Sous l\'en-tête', '#ffffff']]],
+    ['En-tête et menus', [['headerBg', 'Fond de l\'en-tête', 'Bandeau du haut', '#ffffff'], ['headerText', 'Texte du menu et logo', 'Liens du menu, nom de la marque', '#0a0a0a'], ['menuHover', 'Lien du menu au survol', 'Couleur au passage de la souris', '#b8935f'], ['iconColor', 'Icônes (recherche, panier…)', 'Boutons-icônes de l\'en-tête', '#0a0a0a']]],
+    ['Textes', [['titleColor', 'Titres', 'Titres de sections et noms de produits', '#0a0a0a'], ['eyebrow', 'Surtitres', 'Petits textes au-dessus des titres', '#b8935f'], ['textColor', 'Paragraphes', 'Textes d\'introduction', '#8a8a8a']]],
+    ['Cartes produits', [['cardBg', 'Fond des cartes', 'Cartes de la grille produits', '#ffffff'], ['cardBorder', 'Bordure des images', 'Contour des visuels produit', '#e6e6e6'], ['priceColor', 'Prix', 'Prix sur les cartes', '#0a0a0a'], ['badgeBg', 'Fond des badges', 'Promo, nouveau…', '#d4af37'], ['badgeText', 'Texte des badges', 'Promo, nouveau…', '#0a0a0a']]],
+    ['Pied de page et bordures', [['footerBg', 'Fond du pied de page', 'Bas du site', '#0a0a0a'], ['footerText', 'Texte du pied de page', 'Liens et mentions', '#bbbbbb'], ['borderColor', 'Filets et bordures', 'Séparateurs, pastilles de catégories', '#e6e6e6']]]
+  ];
+  function elementsPanel(){
+    var cur = ((D().theme || {}).elements) || {};
+    return '<h3 class="se-h">Couleurs par élément du site</h3><p class="hint" style="margin-top:0">Chaque réglage agit sur <b>un seul</b> élément du site public (indiqué en dessous). Laissez « Par défaut » pour garder la couleur du thème. L\'aperçu se met à jour instantanément ; la publication reste explicite. Le thème du gestionnaire n\'est jamais modifié ici.</p>' + ELS.map(function(g){
+      return '<details class="v6-legacy" open><summary>' + h(g[0]) + '</summary>' + g[1].map(function(e){ var v = cur[e[0]];
+        return '<div class="v6-el"><div><b>' + h(e[1]) + '</b><small>Agit sur : ' + h(e[2]) + '</small></div><div class="v6-el-c"><input type="color" value="' + h(v || e[3]) + '" data-v6el="' + e[0] + '" aria-label="' + h(e[1]) + '"><code>' + h(v || 'Par défaut') + '</code><button type="button" class="btn ghost" data-act="v6ElReset" data-arg="' + e[0] + '"' + (v ? '' : ' disabled') + '>Par défaut</button></div></div>' + (v && V6.contrast && /^(headerText|titleColor|textColor|priceColor|footerText|badgeText|menuHover)$/.test(e[0]) ? contrastHint(e[0], v, cur) : ''); }).join('') + '</details>'; }).join('') +
+      '<div class="v6-row"><button type="button" class="btn ghost" data-act="v6ElResetAll">Tout remettre par défaut</button></div>';
+  }
+  var BGOF = { headerText: 'headerBg', menuHover: 'headerBg', titleColor: 'pageBg', textColor: 'pageBg', priceColor: 'cardBg', footerText: 'footerBg', badgeText: 'badgeBg' }, BGDEF = { headerBg: '#ffffff', pageBg: '#ffffff', cardBg: '#ffffff', footerBg: '#0a0a0a', badgeBg: '#d4af37' };
+  function contrastHint(k, v, cur){ var bg = cur[BGOF[k]] || BGDEF[BGOF[k]]; if(!bg) return ''; var r = V6.contrast(v, bg); return r !== null && r < 4.5 ? '<p class="hint warn">Contraste faible (' + r.toFixed(1) + ':1) avec le fond ' + h(bg) + ' : lecture difficile (4.5:1 recommandé).</p>' : ''; }
+  document.addEventListener('input', function(e){ var k = e.target.dataset && e.target.dataset.v6el; if(!k) return; var t = apThemeSafe(); t.elements = t.elements || {}; t.elements[k] = e.target.value; var c = e.target.parentNode.querySelector('code'); if(c) c.textContent = e.target.value; var b = e.target.parentNode.querySelector('button'); if(b) b.disabled = false; AP.dirtyLocal = true; apSendSoon(); });
+  function apThemeSafe(){ var t = D().theme = D().theme || {}; return t; }
+  Object.assign(ACT_EXTRA, {
+    v6ElReset: function(k){ var t = apThemeSafe(); if(t.elements){ delete t.elements[k]; if(!Object.keys(t.elements).length) delete t.elements; } AP.dirtyLocal = true; apSendSoon(); V6.rerender(); },
+    v6ElResetAll: async function(){ if(!await confirmDlg('Remettre par défaut', 'Retirer toutes les couleurs par élément du brouillon ? Le site publié ne change pas.', 'Remettre', 'dark')) return; var t = apThemeSafe(); delete t.elements; AP.dirtyLocal = true; apSendSoon(); V6.rerender(); }
+  });
   function siteTab(){
     var st = siteState(), ap = D().animApply || {}, lib = V6.libAll().filter(function(x){ return !x.disabled; });
     var rows = Object.keys(SITE_TARGET_LABELS).map(function(k){
@@ -146,7 +168,7 @@
         (a.anim ? '<div class="field"><label>Durée : <b>' + h(a.dur || .6) + ' s</b></label><input type="range" min="0.1" max="3" step="0.05" value="' + h(a.dur || .6) + '" data-v6s="sdur" data-t="' + k + '"></div><div class="field"><label>Intensité : <b>' + h(a.int || 1) + '</b></label><input type="range" min="0.2" max="2" step="0.1" value="' + h(a.int || 1) + '" data-v6s="sint" data-t="' + k + '"></div><div class="field"><label>Retard : <b>' + h(a.delay || 0) + ' s</b></label><input type="range" min="0" max="2" step="0.05" value="' + h(a.delay || 0) + '" data-v6s="sdel" data-t="' + k + '"></div><div class="field"><label>Courbe</label><select data-v6s="sease" data-t="' + k + '">' + SLX_ANIM_EASES.map(function(e){ return '<option' + (a.ease === e ? ' selected' : '') + '>' + h(e) + '</option>'; }).join('') + '</select></div>' : '') + '</div></div>';
     }).join('');
     return '<div class="v6-sub">Apparence du <b>site public</b>. Vos changements restent un <b>brouillon</b> (aperçu ci-dessous) jusqu\'au clic sur « Publier » : rien n\'est publié automatiquement. <span class="v6-badge ' + st[1] + '">' + h(st[0]) + '</span></div>' +
-      '<div class="v6-site">' + (typeof viewAppearance === 'function' ? viewAppearance() : '') + '</div>' +
+      '<div class="v6-site">' + (typeof viewAppearance === 'function' ? viewAppearance() : '') + '</div>' + elementsPanel() +
       '<h3 class="se-h">Animations personnalisées du site</h3><p class="hint" style="margin-top:0">Choisissez une animation de la bibliothèque pour chaque zone. L\'aperçu se met à jour en direct. Elles sont ignorées pour les visiteurs qui demandent « moins d\'animations ».</p>' + rows +
       '<div class="v6-row sticky"><button type="button" class="btn" data-act="v6SiteSave">Enregistrer le brouillon</button><button type="button" class="btn gold" data-act="v6SitePublish">Publier l\'apparence et les animations</button><button type="button" class="btn ghost" data-act="v6SiteResetAnim">Retirer mes animations (brouillon)</button></div>';
   }

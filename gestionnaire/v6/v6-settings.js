@@ -76,12 +76,30 @@
       { id: '2fa', title: 'Double authentification (2FA)', sub: 'Sécurité', desc: 'Second facteur à la connexion. Architecture réservée.', state: 'preparation' },
       { id: 'compta', title: 'Export comptable', sub: 'Données', desc: 'Export des ventes pour la comptabilité.', state: 'preparation' },
       { id: 'multi', title: 'Plusieurs administrateurs et rôles', sub: 'Sécurité', desc: 'Comptes distincts avec droits limités.', state: 'preparation' },
-      { id: 'mail', title: 'Notifications par e-mail', sub: 'Commandes', desc: 'Messages automatiques aux clients et à l\'équipe.', state: 'preparation' },
+      { id: 'mail', title: 'Notifications par e-mail', sub: 'Commandes', desc: 'Alertes de commande envoyées à votre équipe par e-mail.', state: V6.cfg.v6_notify.emails.length ? 'actif' : 'inactif', link: ['settings', 'notify'] },
       { id: 'promo', title: 'Codes promotionnels', sub: 'Ventes', desc: 'Réductions par code, avec règles et dates.', state: 'preparation' },
       { id: 'avis', title: 'Avis clients', sub: 'Ventes', desc: 'Collecte et modération des avis.', state: 'preparation' },
-      { id: 'wa', title: 'Notifications WhatsApp', sub: 'Commandes', desc: 'Alertes de commande sur WhatsApp.', state: 'preparation' }
+      { id: 'wa', title: 'Notifications WhatsApp', sub: 'Commandes', desc: 'Alertes de commande sur WhatsApp (API officielle).', state: V6.cfg.v6_notify.whatsapp.length ? 'actif' : 'inactif', link: ['settings', 'notify'] },
+      { id: 'centre', title: 'Centre de notifications', sub: 'Interface', desc: 'Messages techniques classés par priorité.', state: 'actif', link: ['notifs'] }
     ].sort(function(a, b){ return a.title.localeCompare(b.title, 'fr'); });
   }
+  var EXPL = {
+    abandon: ['Savoir quels paniers sont réellement abandonnés.', 'Le statut « abandonné » et les statistiques de paniers.', 'Saisissez un nombre de minutes puis Enregistrer.', 'Appliqué immédiatement aux listes ; aucun panier n\'est modifié.'],
+    alertes: ['Être prévenu dès qu\'une commande arrive.', 'Affichage d\'une alerte dans ce gestionnaire.', 'Case à cocher.', 'Enregistré sur le serveur, effectif tout de suite.'],
+    anim: ['Donner du mouvement au site public.', 'Seulement l\'apparence du site, après publication explicite.', 'Ouvrez COULEURS ET ANIMATIONS › SITE WEB.', 'Rien n\'est publié tant que vous ne confirmez pas.'],
+    sauv: ['Revenir à une version précédente en cas d\'erreur.', 'Aucun changement : consultation et restauration.', 'Ouvrez DÉTAILS.', 'Une restauration demande confirmation.'],
+    consent: ['Respecter le choix des visiteurs (RGPD).', 'Un bandeau s\'affiche ; aucun pixel ne se charge avant accord.', 'Case dans Pixels et intégrations.', 'Effectif après publication des intégrations.'],
+    cadence: ['Garder les commandes à jour sans temps réel.', 'Fréquence des requêtes de rafraîchissement.', 'Nombre de secondes (5 à 300) puis Enregistrer.', 'Appliqué immédiatement.'],
+    densite: ['Afficher plus d\'informations ou des zones plus grandes.', 'Espacements de ce gestionnaire uniquement.', 'Menu dans Préférences générales.', 'Mémorisé sur cet appareil et le serveur.'],
+    limite: ['Empêcher les commandes en rafale abusives.', 'Nombre maximal de commandes par appareil toutes les 10 minutes.', 'Saisissez la valeur (1 à 100) puis Enregistrer.', 'Appliqué aux prochaines commandes ; les clients au-delà voient un message d\'attente.'],
+    mouv: ['Confort pour les personnes sensibles au mouvement.', 'Supprime les animations de ce gestionnaire.', 'Case à cocher.', 'Immédiat, mémorisé.'],
+    apparence: ['Personnaliser les couleurs du gestionnaire.', 'Uniquement ce gestionnaire, jamais le site public.', 'Ouvrez COULEURS ET ANIMATIONS › Gestionnaire.', 'Aperçu direct puis Enregistrer.'],
+    mail: ['Être prévenu par e-mail d\'une commande.', 'Destinataires internes ; jamais visibles des clients.', 'Ajoutez des adresses dans Notifications de commande.', 'L\'envoi réel exige la fonction serveur et ses clés (voir la page).'],
+    wa: ['Être prévenu sur WhatsApp.', 'Numéros internes au format international.', 'Ajoutez des numéros dans Notifications de commande.', 'L\'envoi réel exige l\'API WhatsApp Business et ses identifiants.'],
+    centre: ['Voir les alertes techniques sans encombrer l\'accueil.', 'Aucune donnée modifiée : lecture, archivage, liens.', 'Ouvrez NOTIFICATIONS.', 'Lu / archivé mémorisé.'],
+    '2fa': ['Protéger l\'accès même si le code est découvert : après le code, un second contrôle (application d\'authentification) est demandé.', 'Ajouterait une étape à la connexion.', 'Pas encore activable.', 'En attendant : code robuste (10 caractères, lettre + chiffre) et code de récupération.']
+  };
+  function explHtml(id){ var e = EXPL[id]; return e ? '<dl class="v6-expl"><dt>À quoi ça sert</dt><dd>' + h(e[0]) + '</dd><dt>Ce que cela change</dt><dd>' + h(e[1]) + '</dd><dt>Comment l\'activer / modifier</dt><dd>' + h(e[2]) + '</dd><dt>Après l\'enregistrement</dt><dd>' + h(e[3]) + '</dd></dl>' : ''; }
   var STATE = { actif: ['Actif', 'ok'], inactif: ['Inactif', ''], preparation: ['En préparation', 'warn'] };
   function featTab(){
     var all = registry(), F = V6.F, q = F.q.trim().toLowerCase();
@@ -91,10 +109,10 @@
     var az = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(function(l){ return '<button type="button" class="' + (F.letter === l ? 'on' : '') + '" ' + (letters[l] ? '' : 'disabled') + ' data-act="v6Letter" data-arg="' + l + '">' + l + '</button>'; }).join('');
     var rows = list.map(function(x){
       var st = STATE[x.state], open = F.open === x.id, body = '';
-      if(open){
-        if(x.state === 'preparation') body = '<div class="v6-note">Fonctionnalité <b>en préparation</b> : elle n\'est pas disponible et rien n\'est simulé. Elle apparaîtra ici avec ses réglages dès qu\'elle sera réellement opérationnelle.</div>';
-        else if(x.link) body = '<button type="button" class="btn dark" data-act="v6Go" data-arg="' + x.link.join(':') + '">Ouvrir le réglage</button>';
-        else if(x.cfg) body = cfgHtml(x);
+      if(open){ body = explHtml(x.id);
+        if(x.state === 'preparation') body += '<div class="v6-note">Fonctionnalité <b>en préparation</b> : elle n\'est pas disponible et rien n\'est simulé. Elle apparaîtra ici avec ses réglages dès qu\'elle sera réellement opérationnelle.</div>';
+        else if(x.link) body += '<button type="button" class="btn dark" data-act="v6Go" data-arg="' + x.link.join(':') + '">Ouvrir le réglage</button>';
+        else if(x.cfg) body += cfgHtml(x);
       }
       return '<div class="v6-feat ' + (open ? 'open' : '') + '"><button type="button" class="v6-feat-h" data-act="v6Feat" data-arg="' + x.id + '" aria-expanded="' + open + '"><span class="v6-az">' + h(x.title[0].toUpperCase()) + '</span><span class="v6-ft"><b>' + h(x.title) + '</b><small>' + h(x.sub) + ' — ' + h(x.desc) + '</small></span>' + badge(st[0], st[1]) + '</button>' + (open ? '<div class="v6-feat-b">' + body + '</div>' : '') + '</div>';
     }).join('') || '<p class="muted">Aucune fonctionnalité ne correspond.</p>';
@@ -126,13 +144,17 @@
 
   /* ======================= PIXELS ET INTÉGRATIONS ======================= */
   V6.PROVIDERS = [
-    { id: 'metaPixel', name: 'Meta Pixel (Facebook / Instagram)', cat: 'marketing', re: /^[0-9]{6,20}$/, ph: '1234567890123456', help: 'Identifiant du Pixel (chiffres).' },
-    { id: 'ga4', name: 'Google Analytics 4', cat: 'analytics', re: /^G-[A-Z0-9]{4,14}$/, ph: 'G-XXXXXXXXXX', help: 'ID de mesure commençant par G-.' },
-    { id: 'gtm', name: 'Google Tag Manager', cat: 'analytics', re: /^GTM-[A-Z0-9]{4,10}$/, ph: 'GTM-XXXXXXX', help: 'ID de conteneur commençant par GTM-.' },
-    { id: 'gads', name: 'Google Ads', cat: 'marketing', re: /^AW-[0-9]{6,14}$/, ph: 'AW-123456789', help: 'ID de conversion commençant par AW-.' },
-    { id: 'tiktok', name: 'TikTok Pixel', cat: 'marketing', re: /^[A-Z0-9]{8,30}$/, ph: 'C1234567890ABCDEF', help: 'Code du Pixel (majuscules et chiffres).' },
-    { id: 'pinterest', name: 'Pinterest Tag', cat: 'marketing', re: /^[0-9]{8,20}$/, ph: '2612345678901', help: 'Identifiant de la balise (chiffres).' }
+    { id: 'metaPixel', name: 'Meta Pixel', sub: 'Facebook / Instagram', ab: 'f', col: '#1877f2', cat: 'marketing', re: /^[0-9]{6,20}$/, ph: '1234567890123456', help: 'Identifiant du Pixel (chiffres).', desc: 'Mesure les visites et achats pour vos publicités Facebook et Instagram. La Conversions API (envoi serveur) nécessite un jeton d\'accès à enregistrer côté serveur.', capi: 'Conversions API : jeton serveur requis (non configuré)' },
+    { id: 'ga4', name: 'Google Analytics 4', sub: 'Statistiques de trafic', ab: 'G', col: '#e37400', cat: 'analytics', re: /^G-[A-Z0-9]{4,14}$/, ph: 'G-XXXXXXXXXX', help: 'ID de mesure commençant par G-.', desc: 'Suit les visiteurs, les pages vues et les achats dans Google Analytics.' },
+    { id: 'gtm', name: 'Google Tag Manager', sub: 'Gestionnaire de balises', ab: 'GTM', col: '#246fdb', cat: 'analytics', re: /^GTM-[A-Z0-9]{4,10}$/, ph: 'GTM-XXXXXXX', help: 'ID de conteneur commençant par GTM-.', desc: 'Charge vos autres balises depuis Google. Évitez de doubler GA4 / Ads si elles sont déjà dans le conteneur.' },
+    { id: 'gads', name: 'Google Ads', sub: 'Conversions publicitaires', ab: 'Ads', col: '#34a853', cat: 'marketing', re: /^AW-[0-9]{6,14}$/, ph: 'AW-123456789', help: 'ID de conversion commençant par AW-.', desc: 'Mesure les conversions de vos campagnes Google Ads.' },
+    { id: 'tiktok', name: 'TikTok Pixel', sub: 'TikTok for Business', ab: 'Tk', col: '#111', cat: 'marketing', re: /^[A-Z0-9]{8,30}$/, ph: 'C1234567890ABCDEF', help: 'Code du Pixel (majuscules et chiffres).', desc: 'Mesure les visites et achats issus de vos publicités TikTok. Events API (serveur) : jeton requis (non configuré).' },
+    { id: 'pinterest', name: 'Pinterest Tag', sub: 'Pinterest Ads', ab: 'P', col: '#e60023', cat: 'marketing', re: /^[0-9]{8,20}$/, ph: '2612345678901', help: 'Identifiant de la balise (chiffres).', desc: 'Mesure les visites et achats pour vos épingles et publicités Pinterest.' },
+    { id: 'linkedin', name: 'LinkedIn Insight Tag', sub: 'LinkedIn Ads', ab: 'in', col: '#0a66c2', cat: 'marketing', re: /^[0-9]{5,12}$/, ph: '1234567', help: 'Identifiant de partenaire (chiffres).', desc: 'Mesure les conversions et audiences de vos campagnes LinkedIn.' },
+    { id: 'snapchat', name: 'Snap Pixel', sub: 'Snapchat Ads', ab: 'S', col: '#c9a800', cat: 'marketing', re: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', help: 'Identifiant du Pixel (UUID).', desc: 'Mesure les visites et achats issus de Snapchat.' },
+    { id: 'clarity', name: 'Microsoft Clarity', sub: 'Cartes de chaleur', ab: 'C', col: '#5b5fc7', cat: 'analytics', re: /^[a-z0-9]{8,14}$/, ph: 'abcdefghij', help: 'Identifiant du projet (lettres minuscules et chiffres).', desc: 'Enregistre des cartes de chaleur et des replays anonymisés. Chargé seulement après consentement.' }
   ];
+  function chk(id){ try{ var c = JSON.parse(localStorage.getItem('slx_v6_pixchk') || '{}')[id]; return c ? 'Dernière vérification du format : ' + new Date(c).toLocaleString('fr-FR') : 'Format jamais vérifié.'; }catch(e){ return ''; } }
   function igState(p){
     var d = (D().integrations || {})[p.id] || {}, pub = (S.published.integrations || {})[p.id] || {};
     var same = JSON.stringify({ id: d.id || '', e: !!d.enabled }) === JSON.stringify({ id: pub.id || '', e: !!pub.enabled });
@@ -146,14 +168,14 @@
     return '<div class="v6-note"><b>Identifiants publics uniquement.</b> Saisissez l\'identifiant du pixel ou de la balise, jamais un jeton d\'API, une clé secrète ou un mot de passe : le site public est lisible par tout le monde. Rien n\'est chargé tant que l\'intégration n\'est pas <b>activée</b> et <b>publiée</b>' + (rc ? ', ni avant l\'accord du visiteur' : '') + '. <b>Non testé en conditions réelles</b> : après publication, vérifiez avec l\'outil officiel de chaque plateforme (Meta Pixel Helper, Tag Assistant, etc.).</div>' +
       '<label class="v6-switch"><input type="checkbox" data-v6c="consent"' + (rc ? ' checked' : '') + '> Demander le consentement des visiteurs avant de charger ces outils</label>' + (rc ? '' : '<p class="hint warn">Sans bandeau de consentement, vous restez responsable de la conformité (RGPD / ePrivacy).</p>') +
       '<div class="v6-prov">' + V6.PROVIDERS.map(function(p){ var it = ig[p.id] || {}, st = igState(p), bad = it.id && !p.re.test(it.id);
-        return '<div class="v6-card"><div class="v6-card-h"><b>' + h(p.name) + '</b>' + badge(st[0], st[1]) + '</div><div class="field"><label for="v6i-' + p.id + '">Identifiant public</label><input id="v6i-' + p.id + '" value="' + h(it.id || '') + '" placeholder="' + h(p.ph) + '" autocomplete="off" spellcheck="false" data-v6c="pid" data-p="' + p.id + '"><small class="hint' + (bad ? ' warn' : '') + '">' + (bad ? 'Format invalide. ' : '') + h(p.help) + ' Catégorie de consentement : ' + (p.cat === 'analytics' ? 'mesure' : 'publicité') + '.</small></div>' +
+        return '<div class="v6-card"><div class="v6-card-h"><span class="v6-logo" style="background:' + p.col + '" aria-hidden="true">' + h(p.ab) + '</span><b>' + h(p.name) + '<small>' + h(p.sub) + '</small></b>' + badge(st[0], st[1]) + '</div><p class="hint">' + h(p.desc) + '</p>' + (p.capi ? '<p class="hint warn">' + h(p.capi) + '</p>' : '') + '<div class="field"><label for="v6i-' + p.id + '">Identifiant public</label><input id="v6i-' + p.id + '" value="' + h(it.id || '') + '" placeholder="' + h(p.ph) + '" autocomplete="off" spellcheck="false" data-v6c="pid" data-p="' + p.id + '"><small class="hint' + (bad ? ' warn' : '') + '">' + (bad ? 'Format invalide. ' : '') + h(p.help) + ' Catégorie de consentement : ' + (p.cat === 'analytics' ? 'mesure' : 'publicité') + '.</small></div>' +
         '<div class="v6-row"><label class="v6-switch"><input type="checkbox" data-v6c="pen" data-p="' + p.id + '"' + (it.enabled ? ' checked' : '') + '> Activer</label><button type="button" class="btn ghost" data-act="v6PixTest" data-arg="' + p.id + '">Vérifier le format</button><button type="button" class="btn ghost" data-act="v6PixDel" data-arg="' + p.id + '">Supprimer</button></div></div>'; }).join('') + '</div>' +
-      '<p class="hint">Autres plateformes (Snapchat, LinkedIn…) : l\'architecture est extensible — chaque intégration est indépendante, désactivable et chargée séparément ; elles seront ajoutées à cette liste.</p>' +
+      '<p class="hint">Chaque outil est indépendant : activable, désactivable et chargé séparément, jamais avant l\'accord du visiteur, sans donnée personnelle (e-mail, téléphone, adresse) transmise par ce site.</p>' +
       '<div class="v6-row sticky"><button type="button" class="btn" data-act="v6PixSave">Enregistrer le brouillon</button><button type="button" class="btn gold" data-act="v6PixPublish">Publier les intégrations</button>' + (unpublished ? badge('modifications non publiées', 'warn') : '') + '</div>';
   }
   function ig(){ var d = D(); if(!d.integrations || typeof d.integrations !== 'object') d.integrations = {}; return d.integrations; }
   Object.assign(ACT_EXTRA, {
-    v6PixTest: function(a){ var p = V6.PROVIDERS.find(function(x){ return x.id === a; }), v = (ig()[a] || {}).id || ''; if(!v) return toast('Aucun identifiant à vérifier.', 'err'); toast(p.re.test(v) ? 'Format valide (la réception réelle des données se vérifie avec l\'outil officiel de la plateforme).' : 'Format invalide pour ' + h(p.name) + '.', p.re.test(v) ? '' : 'err'); },
+    v6PixTest: function(a){ try{ var c = JSON.parse(localStorage.getItem('slx_v6_pixchk') || '{}'); c[a] = new Date().toISOString(); localStorage.setItem('slx_v6_pixchk', JSON.stringify(c)); }catch(e){} setTimeout(function(){ V6.rerender(); }, 50); var p = V6.PROVIDERS.find(function(x){ return x.id === a; }), v = (ig()[a] || {}).id || ''; if(!v) return toast('Aucun identifiant à vérifier.', 'err'); toast(p.re.test(v) ? 'Format valide (la réception réelle des données se vérifie avec l\'outil officiel de la plateforme).' : 'Format invalide pour ' + h(p.name) + '.', p.re.test(v) ? '' : 'err'); },
     v6PixDel: async function(a){ if(!await confirmDlg('Supprimer l\'intégration', 'Effacer l\'identifiant de cette intégration du brouillon ? Rien ne change sur le site tant que vous ne publiez pas.', 'Supprimer', 'danger')) return; delete ig()[a]; await commit('Intégration retirée du brouillon.'); V6.rerender(); },
     v6PixSave: async function(){ await commit('Intégrations enregistrées (brouillon, non publiées).'); V6.rerender(); },
     v6PixPublish: async function(){

@@ -4082,7 +4082,10 @@ if(senluxeCmsReady()){senluxeRemoteStart();}
     gtm:       { cat: 'analytics', re: /^GTM-[A-Z0-9]{4,10}$/ },
     gads:      { cat: 'marketing', re: /^AW-[0-9]{6,14}$/ },
     tiktok:    { cat: 'marketing', re: /^[A-Z0-9]{8,30}$/ },
-    pinterest: { cat: 'marketing', re: /^[0-9]{8,20}$/ }
+    pinterest: { cat: 'marketing', re: /^[0-9]{8,20}$/ },
+    linkedin:  { cat: 'marketing', re: /^[0-9]{5,12}$/ },
+    snapchat:  { cat: 'marketing', re: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i },
+    clarity:   { cat: 'analytics', re: /^[a-z0-9]{8,14}$/ }
   };
   var LOADED = {};
   function readConsent(){ try{ return JSON.parse(localStorage.getItem('slx_consent_v6') || 'null'); }catch(e){ return null; } }
@@ -4105,6 +4108,9 @@ if(senluxeCmsReady()){senluxeRemoteStart();}
         q.setAndDefer = function(o, m){ o[m] = function(){ o.push([m].concat([].slice.call(arguments, 0))); }; }; q.methods.forEach(function(m){ q.setAndDefer(q, m); }); }
       addScript('https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=' + encodeURIComponent(id) + '&lib=ttq', 'slx6-tt'); q.push(['page']);
     },
+    linkedin: function(id){ window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || []; window._linkedin_data_partner_ids.push(id); addScript('https://snap.licdn.com/li.lms-analytics/insight.min.js', 'slx6-li'); },
+    snapchat: function(id){ if(!window.snaptr){ var a = window.snaptr = function(){ a.handleRequest ? a.handleRequest.apply(a, arguments) : a.queue.push([].slice.call(arguments)); }; a.queue = []; } addScript('https://sc-static.net/scevent.min.js', 'slx6-sc'); window.snaptr('init', id); window.snaptr('track', 'PAGE_VIEW'); },
+    clarity: function(id){ var c = window.clarity = window.clarity || function(){ (c.q = c.q || []).push(arguments); }; addScript('https://www.clarity.ms/tag/' + encodeURIComponent(id), 'slx6-cl'); },
     pinterest: function(id){
       if(!window.pintrk){ var p = window.pintrk = function(){ p.queue.push([].slice.call(arguments)); }; p.queue = []; p.version = '3.0'; }
       addScript('https://s.pinimg.com/ct/core.js', 'slx6-pin'); window.pintrk('load', id); window.pintrk('page');
@@ -4136,6 +4142,36 @@ if(senluxeCmsReady()){senluxeRemoteStart();}
     runIntegrations(ig, c);
   }
 
+  /* ---------- couleurs par élément (theme.elements) : sélecteurs FIXES ici, valeurs = couleurs hexadécimales uniquement ---------- */
+  var ELEMENTS = {
+    pageBg:     { sel: 'body', prop: 'background-color' },
+    headerBg:   { sel: '#siteHeader', prop: 'background-color' },
+    headerText: { sel: '#siteHeader .nav-link, #siteHeader .logo-word', prop: 'color' },
+    menuHover:  { sel: '#siteHeader .nav-link:hover', prop: 'color' },
+    iconColor:  { sel: '#siteHeader button, #siteHeader svg', prop: 'color' },
+    catStripBg: { sel: '.cat-strip', prop: 'background-color' },
+    sectionBg:  { sel: '.newsletter, .collections', prop: 'background-color' },
+    titleColor: { sel: '.section-head h2, .newsletter h2, .product-name', prop: 'color' },
+    eyebrow:    { sel: '.section-head .eyebrow', prop: 'color' },
+    textColor:  { sel: '.section-head p, .newsletter p', prop: 'color' },
+    cardBg:     { sel: '.product-card', prop: 'background-color' },
+    cardBorder: { sel: '.product-media', prop: 'border-color' },
+    priceColor: { sel: '.product-price', prop: 'color' },
+    badgeBg:    { sel: '.badge', prop: 'background-color' },
+    badgeText:  { sel: '.badge', prop: 'color' },
+    storyBg:    { sel: '.story', prop: 'background-color' },
+    footerBg:   { sel: 'footer', prop: 'background-color' },
+    footerText: { sel: 'footer, footer a', prop: 'color' },
+    borderColor:{ sel: '.footer-top, .cat-pill', prop: 'border-color' }
+  };
+  window.SLX_V6_ELEMENTS = ELEMENTS;
+  function applyElements(p){
+    var e = p && p.theme && p.theme.elements, st = document.getElementById('slx-v6-elements'), css = [];
+    if(e && typeof e === 'object') Object.keys(ELEMENTS).forEach(function(k){ var v = e[k]; if(typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) css.push(ELEMENTS[k].sel + '{' + ELEMENTS[k].prop + ':' + v + '!important}'); });
+    if(!css.length){ if(st) st.remove(); return; }
+    if(!st){ st = document.createElement('style'); st.id = 'slx-v6-elements'; document.head.appendChild(st); }
+    st.textContent = css.join('\n');
+  }
   var lastMotion = null;
   function applyMotion(p){
     var m = p && p.motion && typeof p.motion === 'object' ? p.motion : null, key = JSON.stringify(m || null);
@@ -4144,7 +4180,7 @@ if(senluxeCmsReady()){senluxeRemoteStart();}
     if(!m || !Object.keys(m).length){ SLX_MOTION.uninstall(); return; }
     SLX_MOTION.install(m, SLX_MOTION.TARGETS.public);
   }
-  window.slxV6Apply = function(p){ try{ applyMotion(p); }catch(e){} try{ applyAnim(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
+  window.slxV6Apply = function(p){ try{ applyMotion(p); }catch(e){} try{ applyAnim(p); }catch(e){} try{ applyElements(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
   if(window.parent !== window){
     window.addEventListener('message', function(e){ if(e.source !== window.parent) return; var m = e.data; if(m && m.type === 'senluxe-preview' && m.payload) window.slxV6Apply(m.payload); });
   }
