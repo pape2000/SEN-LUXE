@@ -85,3 +85,25 @@ html.v6-reduce *,html.v6-reduce *::before,html.v6-reduce *::after{animation-dura
 .topbar{flex-wrap:wrap}.topbar #viewTitle,.topbar h1{min-width:0;overflow-wrap:anywhere}.top-actions{min-width:0}
 .panel-head{flex-wrap:wrap;gap:10px}.panel-head>div{min-width:0}
 @media (max-width:640px){.panel-head .btn,.panel-head .row,.panel-head>div+*{max-width:100%}.panel-head .btn{white-space:normal}}
+/* motion UI */
+.v6-mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:12px 0 20px}
+.v6-mcard{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:grid;gap:12px;min-width:0;align-content:start}
+.v6-mcard.open{border-color:var(--gold-bright)}
+.v6-mdemo{min-height:120px;display:grid;place-items:center;background:var(--sand);border-radius:var(--radius);padding:14px;overflow:hidden}
+.v6-mmeta{display:grid;gap:6px;justify-items:start}.v6-mmeta b{font-size:14px}.v6-mmeta p{margin:0;font-size:12.5px;color:var(--mute);line-height:1.5}
+.v6-mctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding-top:6px;border-top:1px solid var(--line-soft)}
+.v6-mctl select,.v6-card select{padding:9px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--white);min-height:40px;width:100%}
+.v6-dm-num{text-align:center}.v6-dm-num b{display:block;font:500 26px 'Playfair Display',serif;font-variant-numeric:tabular-nums}.v6-dm-num small{color:var(--mute)}
+.v6-dm-bar{width:100%}.v6-dm-bar>div{height:10px;background:rgba(0,0,0,.08);border-radius:99px;overflow:hidden}.v6-dm-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-bright))}.v6-dm-bar small{display:block;margin-top:8px;color:var(--mute)}
+.v6-dm-ch{width:100%;max-width:240px}
+.v6-dm-chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.v6-dm-chips button{padding:8px 14px;border:1px solid var(--line);background:var(--white);border-radius:999px;cursor:pointer;font-size:12px}.v6-dm-chips .on{background:var(--black);color:var(--gold-bright);border-color:var(--black)}
+.v6-dm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}.v6-dm-card{background:var(--white);border:1px solid var(--line);border-radius:4px;padding:6px;display:grid;gap:5px}.v6-dm-card i{display:block;height:34px;background:linear-gradient(135deg,var(--gold),var(--gold-bright));border-radius:2px}.v6-dm-card span{display:block;height:6px;width:60%;background:var(--line)}
+.v6-dm-btn{margin-top:8px}
+.v6-dm-toasts{min-height:44px;width:100%;display:grid;align-content:end}.v6-dm-toast{background:var(--black);color:#fff;padding:12px 16px;font-size:12.5px;border-radius:var(--radius);position:relative;overflow:hidden}
+.v6-dm-logo{background:#0a0a0a;padding:18px 26px;border-radius:var(--radius)}.v6-dm-logo .logo-word{font:500 26px 'Playfair Display',serif;letter-spacing:.2em;color:#fff;display:inline-block}.v6-dm-logo .logo-word i{font-style:normal;color:#fff}.v6-dm-logo .logo-word b{font-weight:500;color:var(--gold-bright);margin-left:.4em}
+.v6-dm-h{font:500 22px 'Playfair Display',serif;margin:0;text-align:center}
+.v6-dm-sec{background:var(--white);border:1px solid var(--line);padding:16px 18px;width:100%}.v6-dm-sec b{font:500 16px 'Playfair Display',serif}.v6-dm-sec p{margin:6px 0 0;color:var(--mute);font-size:12.5px}
+.v6-dm-bag{display:inline-block;padding:8px 14px;border:1px solid var(--line);background:var(--white);border-radius:999px;font-size:12.5px}.v6-dm-bag em{font-style:normal;display:inline-block;background:var(--gold-bright);color:var(--black);min-width:20px;text-align:center;border-radius:99px;padding:1px 6px;font-weight:700}
+.v6-dm-nav{display:flex;gap:22px}.v6-dm-a{font-size:12px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding-bottom:3px;background:linear-gradient(var(--gold-bright),var(--gold-bright)) left bottom/0 1px no-repeat;transition:background-size .35s cubic-bezier(.22,.8,.2,1)}.v6-dm-a:hover{background-size:100% 1px}
+.v6-legacy{margin:22px 0;border:1px solid var(--line);border-radius:var(--radius);background:var(--white)}.v6-legacy>summary{padding:14px 16px;cursor:pointer;font-weight:600;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;min-height:48px;display:flex;align-items:center}.v6-legacy[open]>summary{border-bottom:1px solid var(--line)}.v6-legacy>*:not(summary){padding-left:16px;padding-right:16px}
+@media (max-width:560px){.v6-mgrid{grid-template-columns:1fr}}

@@ -1095,7 +1095,7 @@ function pendingCount(){
   if(n===0 && d.products.map(x=>x.id).join('|') !== p.products.map(x=>x.id).join('|')) n++;
   ['collections','labels','delivery','variantGroups','analytics'].forEach(k=>{ if(JSON.stringify(d[k])!==JSON.stringify(p[k])) n++; });
   ['seo','experience','settings'].forEach(k=>{ if(JSON.stringify(d[k]||{})!==JSON.stringify(p[k]||{})) n++; });
-  ['integrations','animApply'].forEach(k=>{ if(JSON.stringify(d[k]||{})!==JSON.stringify(p[k]||{})) n++; });
+  ['integrations','animApply','motion'].forEach(k=>{ if(JSON.stringify(d[k]||{})!==JSON.stringify(p[k]||{})) n++; });
   if(JSON.stringify(d.animLib||[])!==JSON.stringify(p.animLib||[])) n++;
   const hk = new Set([...Object.keys(d.home), ...Object.keys(p.home)]);
   hk.forEach(k=>{ if(k!=='heroImage' && JSON.stringify(d.home[k])!==JSON.stringify(p.home[k])) n++; });
@@ -4414,8 +4414,10 @@ window.addEventListener('beforeunload', e=>{ if(unsavedForms().length){ e.preven
 </script>
 <link rel="stylesheet" href="v6/v6.css">
 <script src="v6/anim-validate.js" defer></script>
+<script src="v6/motion.js" defer></script>
 <script src="v6/v6-core.js" defer></script>
 <script src="v6/v6-settings.js" defer></script>
 <script src="v6/v6-studio.js" defer></script>
+<script src="v6/v6-motion-ui.js" defer></script>
 </body>
 </html>

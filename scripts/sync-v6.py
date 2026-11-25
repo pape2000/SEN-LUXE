@@ -7,8 +7,9 @@ idx = root / 'index.html'
 html = idx.read_text(encoding='utf-8')
 v = (root/'gestionnaire/v6/anim-validate.js').read_text(encoding='utf-8')
 a = (root/'gestionnaire/v6/public-apply.js').read_text(encoding='utf-8')
-assert '</script' not in (v+a).lower()
-block = '<!--V6-PUBLIC-BEGIN--><script id="slx-v6-public">\n' + v + '\n' + a + '\n</script><!--V6-PUBLIC-END-->'
+m = (root/'gestionnaire/v6/motion.js').read_text(encoding='utf-8')
+assert '</script' not in (v+a+m).lower()
+block = '<!--V6-PUBLIC-BEGIN--><script id="slx-v6-public">\n' + v + '\n' + m + '\n' + a + '\n</script><!--V6-PUBLIC-END-->'
 html = re.sub(r'<!--V6-PUBLIC-BEGIN-->.*?<!--V6-PUBLIC-END-->\n?', lambda m: '', html, flags=re.S)
 i = html.rindex('</body>')
 html = html[:i] + block + '\n' + html[i:]

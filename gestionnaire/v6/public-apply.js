@@ -83,7 +83,15 @@
     runIntegrations(ig, c);
   }
 
-  window.slxV6Apply = function(p){ try{ applyAnim(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
+  var lastMotion = null;
+  function applyMotion(p){
+    var m = p && p.motion && typeof p.motion === 'object' ? p.motion : null, key = JSON.stringify(m || null);
+    if(key === lastMotion) return; lastMotion = key;
+    if(!window.SLX_MOTION) return;
+    if(!m || !Object.keys(m).length){ SLX_MOTION.uninstall(); return; }
+    SLX_MOTION.install(m, SLX_MOTION.TARGETS.public);
+  }
+  window.slxV6Apply = function(p){ try{ applyMotion(p); }catch(e){} try{ applyAnim(p); }catch(e){} try{ if(window.parent === window) applyIntegrations(p); }catch(e){} };
   if(window.parent !== window){
     window.addEventListener('message', function(e){ if(e.source !== window.parent) return; var m = e.data; if(m && m.type === 'senluxe-preview' && m.payload) window.slxV6Apply(m.payload); });
   }

@@ -9,7 +9,7 @@
   var DEFAULTS = {
     mgr_prefs: { density: 'normal', startView: '', reduceMotion: false, hideHints: false },
     mgr_theme: { preset: 'classic', dark: false, colors: {}, radius: null, font: null, sidebar: null, btn: null },
-    mgr_anim: { style: 'none', speed: 1, apply: {} },
+    mgr_anim: { style: 'none', speed: 1, apply: {}, motion: {} },
     mgr_animlib: []
   };
   var V6 = window.V6 = { version: '6.0.0', cfg: {}, sync: {}, serverLoaded: false, tab: { settings: 'security', studio: 'manager' } };
@@ -100,13 +100,22 @@
     root.setAttribute('data-v6', 'on');
     var sa = document.getElementById('v6-anim'); if(!sa){ sa = document.createElement('style'); sa.id = 'v6-anim'; document.head.appendChild(sa); }
     var apply = {}; Object.keys(an.apply || {}).forEach(function(k){ var a = Object.assign({}, an.apply[k]); a.dur = clampN((a.dur || .5) / clampN(an.speed, 1, .25, 3), .5, .08, 6); apply[k] = a; });
+    V6.applyMotion();
     sa.textContent = (!pr.reduceMotion && typeof SLX_ANIM_BUILD === 'function') ? SLX_ANIM_BUILD(V6.allLib(), apply, V6.MGR_TARGETS) : '';
   };
 
+  V6.applyMotion = function(){
+    if(typeof SLX_MOTION === 'undefined') return;
+    var m = (V6.cfg.mgr_anim || {}).motion, pr = V6.cfg.mgr_prefs, key = JSON.stringify([m || null, !!pr.reduceMotion, V6.cfg.mgr_anim.speed]);
+    if(key === V6._mk) return; V6._mk = key;
+    if(!m || pr.reduceMotion || !Object.keys(m).length){ SLX_MOTION.uninstall(); return; }
+    var cfg = {}; Object.keys(m).forEach(function(k){ cfg[k] = Object.assign({}, m[k], { speed: (m[k].speed || 1) * (V6.cfg.mgr_anim.speed || 1) }); });
+    SLX_MOTION.install(cfg, SLX_MOTION.TARGETS.manager, { gate: function(){ var v = document.getElementById('view'); return !v || v.classList.contains('v6e'); } });
+  };
   /* ---- animation d'entrée de rubrique (sans clignoter lors des simples re-rendus) ---- */
   var _setView = window.setView;
   if(typeof _setView === 'function'){
-    window.setView = function(v){ var el0 = document.getElementById('view'); if(el0 && el0.__v6key && el0.__v6key.split(':')[0] !== v) el0.__v6key = null; var r = _setView.apply(this, arguments); var el = document.getElementById('view'); if(el){ el.classList.remove('v6e'); void el.offsetWidth; el.classList.add('v6e'); clearTimeout(V6._ev); V6._ev = setTimeout(function(){ el.classList.remove('v6e'); }, 1400); } return r; };
+    window.setView = function(v){ var el0 = document.getElementById('view'); if(el0 && el0.__v6key && el0.__v6key.split(':')[0] !== v) el0.__v6key = null; if(el0){ el0.classList.remove('v6e'); void el0.offsetWidth; el0.classList.add('v6e'); clearTimeout(V6._ev); V6._ev = setTimeout(function(){ el0.classList.remove('v6e'); }, 1600); } return _setView.apply(this, arguments); };
   }
 
   /* ---- rendu des rubriques ---- */
